@@ -4,6 +4,12 @@ project(BatteryMonitor LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(APP_VERSION_MAJOR 1 CACHE STRING "BatteryMonitor major version")
+set(APP_VERSION_MINOR 0 CACHE STRING "BatteryMonitor minor version")
+set(APP_VERSION_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(APP_VERSION_HEADER "${APP_VERSION_GENERATED_DIR}/GeneratedAppVersion.h")
+set(APP_VERSION_RC "${APP_VERSION_GENERATED_DIR}/app_version.rc")
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets LinguistTools)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
@@ -38,6 +44,17 @@ if(MSVC)
     add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 
+set(APP_RESOURCE_FILES
+    res/resources.qrc
+)
+
+if(WIN32)
+    set_source_files_properties("${APP_VERSION_RC}" PROPERTIES GENERATED TRUE)
+    list(APPEND APP_RESOURCE_FILES
+        "${APP_VERSION_RC}"
+    )
+endif()
+
 qt_add_executable(BatteryMonitor
     WIN32 MACOSX_BUNDLE
     main.cpp
@@ -68,9 +85,33 @@ qt_add_executable(BatteryMonitor
     util/DeviceSettings.h
     util/Logger.cpp
     util/Logger.h
+    ${APP_RESOURCE_FILES}
 )
 
+add_custom_target(generate_app_version ALL
+    COMMAND ${CMAKE_COMMAND}
+        -DAPP_VERSION_MAJOR=${APP_VERSION_MAJOR}
+        -DAPP_VERSION_MINOR=${APP_VERSION_MINOR}
+        -DAPP_VERSION_HEADER=${APP_VERSION_HEADER}
+        -DAPP_VERSION_HEADER_IN=${CMAKE_CURRENT_SOURCE_DIR}/util/GeneratedAppVersion.h.in
+        -DAPP_VERSION_RC=${APP_VERSION_RC}
+        -DAPP_VERSION_RC_IN=${CMAKE_CURRENT_SOURCE_DIR}/res/app.rc.in
+        -DAPP_ICON_PATH=${CMAKE_CURRENT_SOURCE_DIR}/res/icon.ico
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateVersion.cmake
+    BYPRODUCTS
+        "${APP_VERSION_HEADER}"
+        "${APP_VERSION_RC}"
+    DEPENDS
+        util/GeneratedAppVersion.h.in
+        res/app.rc.in
+        cmake/GenerateVersion.cmake
+        res/icon.ico
+    VERBATIM
+)
+add_dependencies(BatteryMonitor generate_app_version)
+
 target_include_directories(BatteryMonitor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(BatteryMonitor PRIVATE ${APP_VERSION_GENERATED_DIR})
 
 qt_add_translations(
     TARGETS BatteryMonitor

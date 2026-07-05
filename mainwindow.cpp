@@ -10,6 +10,7 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QColor>
+#include <QCoreApplication>
 #include <QEvent>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -212,6 +213,11 @@ QIcon drawBatteryIcon(BatteryLevel level, int size)
     return drawBatteryIcon(level, levelRepresentativePercent(level), size);
 }
 
+QIcon appIcon()
+{
+    return QIcon(QStringLiteral(":/icons/app.png"));
+}
+
 // 找到列表中电量最低的设备，用于托盘 / 窗口图标。
 BatteryIconState lowestIconState(const QList<BatteryDevice> &devices)
 {
@@ -398,8 +404,8 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
     applyTheme();
     loadSettingsIntoUi();
 
-    // 默认图标（未知/灰色）。
-    setWindowIcon(drawBatteryIcon(BatteryLevel::Unknown, 64));
+    // 默认应用图标；有设备数据后会切换为动态电量图标。
+    setWindowIcon(appIcon());
 }
 
 MainWindow::~MainWindow()
@@ -634,6 +640,15 @@ void MainWindow::setupPages()
     m_themeRowTitle = new QLabel(tr("Theme"));
     m_startupRowTitle = new QLabel(tr("Start with Windows"));
     m_staleRetentionRowTitle = new QLabel(tr("Stale retention"));
+    m_versionRowTitle = new QLabel(tr("Version"));
+    m_versionValue = makeValueLabel();
+    m_versionValue->setText(QCoreApplication::applicationVersion());
+    m_projectRowTitle = new QLabel(tr("Project"));
+    m_projectLinkValue = makeValueLabel();
+    m_projectLinkValue->setText(QStringLiteral(
+        "<a href=\"https://github.com/JKWTCN/BatteryMonitor\">github.com/JKWTCN/BatteryMonitor</a>"));
+    m_projectLinkValue->setOpenExternalLinks(true);
+    m_projectLinkValue->setTextInteractionFlags(Qt::TextBrowserInteraction);
     m_intervalCombo = new QComboBox();
     m_intervalCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_languageCombo = new QComboBox();
@@ -649,6 +664,8 @@ void MainWindow::setupPages()
     addInfoRow(settingsGroupLayout, m_themeRowTitle, m_themeCombo);
     addInfoRow(settingsGroupLayout, m_staleRetentionRowTitle, m_staleRetentionCombo);
     addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
+    addInfoRow(settingsGroupLayout, m_versionRowTitle, m_versionValue);
+    addInfoRow(settingsGroupLayout, m_projectRowTitle, m_projectLinkValue);
     settingsLayout->addWidget(settingsGroup);
     settingsLayout->addStretch(1);
 
@@ -732,7 +749,7 @@ void MainWindow::applyTheme()
 
 void MainWindow::setupTray()
 {
-    m_tray = new QSystemTrayIcon(drawBatteryIcon(BatteryLevel::Unknown, 32), this);
+    m_tray = new QSystemTrayIcon(appIcon(), this);
     m_tray->setToolTip(tr("Battery Monitor"));
 
     auto *menu = new QMenu(this);
@@ -994,7 +1011,7 @@ void MainWindow::showTrayHintOnce()
             tr("Battery Monitor"),
             tr("The application will keep running in the system tray. "
                "Use the tray menu to quit."),
-            QSystemTrayIcon::Information, 3000);
+            appIcon(), 3000);
     }
 }
 
@@ -1192,6 +1209,9 @@ void MainWindow::retranslateUi()
     if (m_themeRowTitle) m_themeRowTitle->setText(tr("Theme"));
     if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
     if (m_staleRetentionRowTitle) m_staleRetentionRowTitle->setText(tr("Stale retention"));
+    if (m_versionRowTitle) m_versionRowTitle->setText(tr("Version"));
+    if (m_versionValue) m_versionValue->setText(QCoreApplication::applicationVersion());
+    if (m_projectRowTitle) m_projectRowTitle->setText(tr("Project"));
     retranslateCombos();
 
     // 托盘菜单 / 图标提示。
@@ -1409,14 +1429,17 @@ void MainWindow::updateTray(const QList<BatteryDevice> &devices)
     }
 
     const BatteryIconState iconState = lowestIconState(visible);
-    const QIcon icon = drawBatteryIcon(iconState.level, iconState.percent, 32);
-    m_tray->setIcon(icon);
-    setWindowIcon(drawBatteryIcon(iconState.level, iconState.percent, 64));
 
     if (visible.isEmpty()) {
+        m_tray->setIcon(appIcon());
+        setWindowIcon(appIcon());
         m_tray->setToolTip(tr("Battery Monitor - No devices"));
         return;
     }
+
+    const QIcon icon = drawBatteryIcon(iconState.level, iconState.percent, 32);
+    m_tray->setIcon(icon);
+    setWindowIcon(drawBatteryIcon(iconState.level, iconState.percent, 64));
 
     // tooltip 每设备一行。
     QStringList lines;
@@ -1509,10 +1532,14 @@ void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
         }
 
         if (shouldNotify) {
+            const QIcon notificationIcon = drawBatteryIcon(
+                device.level,
+                iconPercentForDevice(device),
+                64);
             m_tray->showMessage(
                 tr("Low Battery"),
                 tr("%1: %2").arg(deviceDisplayName(device), batteryText(device)),
-                QSystemTrayIcon::Warning, 4000);
+                notificationIcon, 4000);
         }
     }
 }

@@ -8,9 +8,11 @@
 #include "src/providers/xbox/XboxProvider.h"
 #include "util/AppSettings.h"
 #include "util/Logger.h"
+#include "GeneratedAppVersion.h"
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QIcon>
 #include <QLocale>
 #include <QPalette>
 #include <QTranslator>
@@ -109,6 +111,8 @@ int main(int argc, char *argv[])
     QApplication a(argc, argv);
     a.setApplicationName(QStringLiteral("BatteryMonitor"));
     a.setOrganizationName(QStringLiteral("BatteryMonitor"));
+    a.setApplicationVersion(QStringLiteral(APP_VERSION_STRING));
+    QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/app.png")));
     // 关闭窗口后仍允许托盘图标保活（不设置的话某些平台会退出应用）。
     a.setQuitOnLastWindowClosed(false);
 

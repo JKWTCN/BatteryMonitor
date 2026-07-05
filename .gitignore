@@ -9,3 +9,7 @@
 !mainwindow.ui
 !lang
 !external
+!res/
+!res/**
+!cmake/
+!cmake/**

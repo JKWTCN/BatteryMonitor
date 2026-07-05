@@ -155,6 +155,10 @@ private:
     QLabel *m_themeRowTitle = nullptr;
     QLabel *m_startupRowTitle = nullptr;
     QLabel *m_staleRetentionRowTitle = nullptr;
+    QLabel *m_versionRowTitle = nullptr;
+    QLabel *m_versionValue = nullptr;
+    QLabel *m_projectRowTitle = nullptr;
+    QLabel *m_projectLinkValue = nullptr;
     QComboBox *m_intervalCombo = nullptr;
     QComboBox *m_languageCombo = nullptr;
     QComboBox *m_themeCombo = nullptr;

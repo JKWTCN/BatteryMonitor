@@ -1,0 +1,35 @@
+#include <windows.h>
+
+IDI_ICON1 ICON "@APP_ICON_PATH@"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @APP_VERSION_MAJOR@,@APP_VERSION_MINOR@,@APP_VERSION_BUILD_HIGH@,@APP_VERSION_BUILD_LOW@
+ PRODUCTVERSION @APP_VERSION_MAJOR@,@APP_VERSION_MINOR@,@APP_VERSION_BUILD_HIGH@,@APP_VERSION_BUILD_LOW@
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "BatteryMonitor\0"
+            VALUE "FileDescription", "Battery Monitor\0"
+            VALUE "FileVersion", "@APP_VERSION_STRING@\0"
+            VALUE "InternalName", "BatteryMonitor\0"
+            VALUE "OriginalFilename", "BatteryMonitor.exe\0"
+            VALUE "ProductName", "Battery Monitor\0"
+            VALUE "ProductVersion", "@APP_VERSION_STRING@\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

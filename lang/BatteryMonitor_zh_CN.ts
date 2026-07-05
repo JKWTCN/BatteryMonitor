@@ -359,6 +359,18 @@
         <translation>开机自启</translation>
     </message>
     <message>
+        <location filename="../mainwindow.cpp" line="559"/>
+        <location filename="../mainwindow.cpp" line="1066"/>
+        <source>Version</source>
+        <translation>版本</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="562"/>
+        <location filename="../mainwindow.cpp" line="1068"/>
+        <source>Project</source>
+        <translation>项目</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="484"/>
         <location filename="../mainwindow.cpp" line="1114"/>
         <source>Alias</source>
