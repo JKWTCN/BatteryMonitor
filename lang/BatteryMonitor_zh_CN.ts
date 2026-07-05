@@ -352,5 +352,16 @@
         <source>Start with Windows</source>
         <translation>开机自启</translation>
     </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="484"/>
+        <location filename="../mainwindow.cpp" line="1114"/>
+        <source>Alias</source>
+        <translation>别名</translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="1004"/>
+        <source>%1 (%2)</source>
+        <translation>%1（%2）</translation>
+    </message>
 </context>
 </TS>

@@ -17,6 +17,7 @@
 #include <QIcon>
 #include <QLayout>
 #include <QLayoutItem>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
@@ -475,14 +476,18 @@ void MainWindow::setupPages()
     detailLayout->addWidget(m_airPodsGroup);
 
     // —— 设备设置（每台设备持久化的偏好）——
-    // 显示在设备信息页底部：是否加入托盘 / 是否启用低电量提醒 / 提醒阈值。
+    // 显示在设备信息页底部：别名 / 是否加入托盘 / 是否启用低电量提醒 / 提醒阈值。
     // 控件值会随当前展示的设备切换而重新回填（refreshDetailPage 中处理）。
     m_deviceSettingsGroup = makeInfoGroup();
     auto *deviceSettingsLayout =
         qobject_cast<QVBoxLayout *>(m_deviceSettingsGroup->layout());
+    m_deviceAliasRowTitle = new QLabel(tr("Alias"));
     m_deviceTrayRowTitle = new QLabel(tr("Show in tray"));
     m_deviceThresholdRowTitle = new QLabel(tr("Low battery alert"));
     m_deviceAlertPolicyRowTitle = new QLabel(tr("Repeat"));
+    m_deviceAliasEdit = new QLineEdit();
+    m_deviceAliasEdit->setObjectName(QStringLiteral("deviceAliasEdit"));
+    m_deviceAliasEdit->setClearButtonEnabled(true);
     m_deviceTrayCheck = new QCheckBox();
     m_deviceTrayCheck->setObjectName(QStringLiteral("deviceTrayCheck"));
     m_deviceAlertCheck = new QCheckBox();
@@ -519,6 +524,7 @@ void MainWindow::setupPages()
     alertValueLayout->addWidget(m_deviceAlertCheck);
     alertValueLayout->addWidget(m_deviceThresholdSpin, 1);
 
+    addInfoRow(deviceSettingsLayout, m_deviceAliasRowTitle, m_deviceAliasEdit);
     addInfoRow(deviceSettingsLayout, m_deviceTrayRowTitle, m_deviceTrayCheck);
     addInfoRow(deviceSettingsLayout, m_deviceThresholdRowTitle, alertValueWidget);
     addInfoRow(deviceSettingsLayout, m_deviceAlertPolicyRowTitle, m_deviceAlertPolicyCombo);
@@ -625,6 +631,9 @@ void MainWindow::applyTheme()
         "QComboBox:hover { background: %7; }"
         "QComboBox QAbstractItemView { background: %2; color: %4; border: 1px solid %6;"
         "  selection-background-color: %8; selection-color: white; }"
+        "QLineEdit { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
+        "  padding: 6px 10px; }"
+        "QLineEdit:hover { background: %7; }"
         "QSpinBox { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
         "  padding: 6px 10px; }"
         "QSpinBox::up-button, QSpinBox::down-button { width: 18px; }"
@@ -689,6 +698,8 @@ void MainWindow::setupConnections()
     connect(m_deviceAlertPolicyCombo,
             qOverload<int>(&QComboBox::currentIndexChanged),
             this, &MainWindow::onDeviceAlertPolicyChanged);
+    connect(m_deviceAliasEdit, &QLineEdit::editingFinished,
+            this, &MainWindow::onDeviceAliasEditingFinished);
 
     connect(m_tray, &QSystemTrayIcon::activated,
             this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -869,6 +880,21 @@ void MainWindow::onDeviceAlertPolicyChanged(int index)
     notifyLowBattery(m_devices);
 }
 
+void MainWindow::onDeviceAliasEditingFinished()
+{
+    if (m_currentDetailId.isEmpty() || !m_deviceAliasEdit) {
+        return;
+    }
+
+    const QString alias = m_deviceAliasEdit->text().trimmed();
+    DeviceSettings::setAlias(m_currentDetailId, alias);
+    m_deviceAliasEdit->setText(DeviceSettings::alias(m_currentDetailId));
+
+    rebuildTable(m_devices);
+    refreshDetailPage();
+    updateTray(m_devices);
+}
+
 void MainWindow::showTrayHintOnce()
 {
     if (m_trayHintShown) {
@@ -963,6 +989,19 @@ int MainWindow::staleRetentionIndex(int sec) const
     case 300: return 3;
     default:  return 2; // 默认 3 分钟
     }
+}
+
+QString MainWindow::deviceDisplayName(const BatteryDevice &device) const
+{
+    const QString id = QString::fromStdWString(device.id);
+    const QString rawName = QString::fromStdWString(device.name).trimmed();
+    const QString fallbackName = rawName.isEmpty() ? tr("Unknown device") : rawName;
+    const QString alias = DeviceSettings::alias(id);
+
+    if (alias.isEmpty() || alias == fallbackName) {
+        return fallbackName;
+    }
+    return tr("%1 (%2)").arg(alias, fallbackName);
 }
 
 void MainWindow::loadSettingsIntoUi()
@@ -1072,6 +1111,7 @@ void MainWindow::retranslateUi()
     if (m_tray) m_tray->setToolTip(tr("Battery Monitor"));
 
     // 设备信息页“设备设置”分组的标题与控件。
+    if (m_deviceAliasRowTitle) m_deviceAliasRowTitle->setText(tr("Alias"));
     if (m_deviceTrayRowTitle) m_deviceTrayRowTitle->setText(tr("Show in tray"));
     if (m_deviceThresholdRowTitle) m_deviceThresholdRowTitle->setText(tr("Low battery alert"));
     if (m_deviceAlertPolicyRowTitle) m_deviceAlertPolicyRowTitle->setText(tr("Repeat"));
@@ -1121,7 +1161,7 @@ void MainWindow::refreshDetailPage()
     const QString id = QString::fromStdWString(device.id);
     const bool isAirPods = device.subType == BatteryDevice::SubType::AirPods;
 
-    m_detailNameLabel->setText(name.isEmpty() ? tr("Unknown device") : name);
+    m_detailNameLabel->setText(deviceDisplayName(device));
     m_detailBatteryLabel->setText(batteryText(device));
     m_detailStatusLabel->setText(statusText(device));
     m_detailTypeValue->setText(BatteryManager::typeLabel(device.type));
@@ -1139,12 +1179,15 @@ void MainWindow::refreshDetailPage()
     }
 
     // —— 回填设备级设置（屏蔽信号，避免回调写盘）——
-    if (m_deviceTrayCheck && m_deviceAlertCheck && m_deviceThresholdSpin &&
+    if (m_deviceAliasEdit && m_deviceTrayCheck && m_deviceAlertCheck && m_deviceThresholdSpin &&
         m_deviceAlertPolicyCombo) {
+        const QSignalBlocker b0(m_deviceAliasEdit);
         const QSignalBlocker b1(m_deviceTrayCheck);
         const QSignalBlocker b2(m_deviceAlertCheck);
         const QSignalBlocker b3(m_deviceThresholdSpin);
         const QSignalBlocker b4(m_deviceAlertPolicyCombo);
+        m_deviceAliasEdit->setText(DeviceSettings::alias(id));
+        m_deviceAliasEdit->setPlaceholderText(name.isEmpty() ? tr("Unknown device") : name);
         m_deviceTrayCheck->setChecked(DeviceSettings::trayVisible(id));
         const bool alertOn = DeviceSettings::alertEnabled(id);
         m_deviceAlertCheck->setChecked(alertOn);
@@ -1196,7 +1239,7 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
         // stale（缓存沿用）设备整行标灰：电量数保留但视觉降级，提示非实时值。
         const QColor muted(160, 160, 160);
 
-        auto *nameItem = new QTableWidgetItem(QString::fromStdWString(device.name));
+        auto *nameItem = new QTableWidgetItem(deviceDisplayName(device));
         if (device.stale) {
             nameItem->setForeground(muted);
         }
@@ -1294,7 +1337,7 @@ void MainWindow::updateTray(const QList<BatteryDevice> &devices)
             suffix = QStringLiteral(" (") + tr("stale") + QStringLiteral(")");
         }
         lines << QStringLiteral("%1: %2%3")
-                    .arg(QString::fromStdWString(device.name),
+                    .arg(deviceDisplayName(device),
                          batteryText(device),
                          suffix);
     }
@@ -1377,7 +1420,7 @@ void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
         if (shouldNotify) {
             m_tray->showMessage(
                 tr("Low Battery"),
-                tr("%1: %2").arg(QString::fromStdWString(device.name), batteryText(device)),
+                tr("%1: %2").arg(deviceDisplayName(device), batteryText(device)),
                 QSystemTrayIcon::Warning, 4000);
         }
     }

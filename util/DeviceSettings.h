@@ -25,6 +25,7 @@ enum class AlertPolicy
 // 取 hex 前缀作为键名，既稳定又对长度友好。
 //
 // 键布局（QSettings 子组 "devices/<hash>"）：
+//   - Alias               : QString，默认空。用户自定义设备显示名。
 //   - TrayVisible         : bool，默认 true（保留升级前“全部进托盘”的行为）。
 //   - LowBatteryAlert     : bool，默认 true。是否对该设备做低电量提醒。
 //   - LowBatteryThreshold : int 1..100，默认 20。触发提醒的电量百分比上限。
@@ -40,6 +41,10 @@ class DeviceSettings
 public:
     // —— 设备 id -> 稳定哈希键 ——
     static QString keyForDeviceId(const QString &deviceId);
+
+    // —— 用户自定义设备别名 ——
+    static QString alias(const QString &deviceId);
+    static void setAlias(const QString &deviceId, const QString &alias);
 
     // —— 是否显示到托盘 ——
     static bool trayVisible(const QString &deviceId);

@@ -24,6 +24,7 @@ class QComboBox;
 class QEvent;
 class QFrame;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QSpinBox;
 class QStackedWidget;
@@ -75,6 +76,8 @@ private slots:
     void onDeviceThresholdChanged(int value);
     // 设备信息页“提醒策略”下拉框被切换。
     void onDeviceAlertPolicyChanged(int index);
+    // 设备信息页“别名”输入框编辑完成。
+    void onDeviceAliasEditingFinished();
 
 private:
     void setupPages();
@@ -88,6 +91,7 @@ private:
     void refreshDetailPage();
     void updateTray(const QList<BatteryDevice> &devices);
     void notifyLowBattery(const QList<BatteryDevice> &devices);
+    QString deviceDisplayName(const BatteryDevice &device) const;
     // 仅重填三个设置页 combo 的可选项文本（保留当前 index）。
     void retranslateCombos();
     // 把已保存的设置回填到三个设置页 combo。
@@ -127,9 +131,11 @@ private:
     // 与上方“只读信息行”不同：这里的 value 列是可交互控件。
     // 这些控件只对应“当前展示的设备”（m_currentDetailId）。
     QFrame *m_deviceSettingsGroup = nullptr;
+    QLabel *m_deviceAliasRowTitle = nullptr;
     QLabel *m_deviceTrayRowTitle = nullptr;
     QLabel *m_deviceThresholdRowTitle = nullptr;
     QLabel *m_deviceAlertPolicyRowTitle = nullptr;
+    QLineEdit *m_deviceAliasEdit = nullptr;
     QCheckBox *m_deviceTrayCheck = nullptr;
     QCheckBox *m_deviceAlertCheck = nullptr;
     QSpinBox *m_deviceThresholdSpin = nullptr;

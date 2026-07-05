@@ -8,6 +8,7 @@ namespace
 // QSettings 子组名。所有设备偏好集中放在下面，便于将来清理 / 列举。
 constexpr auto kGroupDevices = "devices";
 
+constexpr auto kKeyAlias = "Alias";
 constexpr auto kKeyTrayVisible = "TrayVisible";
 constexpr auto kKeyAlertEnabled = "LowBatteryAlert";
 constexpr auto kKeyLowBatteryThreshold = "LowBatteryThreshold";
@@ -42,6 +43,30 @@ QString prefixFor(const QString &deviceId)
 QString DeviceSettings::keyForDeviceId(const QString &deviceId)
 {
     return hashKey(deviceId);
+}
+
+QString DeviceSettings::alias(const QString &deviceId)
+{
+    if (deviceId.isEmpty()) {
+        return {};
+    }
+    return QSettings().value(prefixFor(deviceId) + kKeyAlias).toString().trimmed();
+}
+
+void DeviceSettings::setAlias(const QString &deviceId, const QString &alias)
+{
+    if (deviceId.isEmpty()) {
+        return;
+    }
+
+    QSettings s;
+    const QString key = prefixFor(deviceId) + kKeyAlias;
+    const QString value = alias.trimmed();
+    if (value.isEmpty()) {
+        s.remove(key);
+        return;
+    }
+    s.setValue(key, value);
 }
 
 bool DeviceSettings::trayVisible(const QString &deviceId)
