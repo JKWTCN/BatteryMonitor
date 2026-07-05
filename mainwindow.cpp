@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 
 #include "battery/BatteryManager.h"
+#include "util/AppSettings.h"
 
 #include <QAction>
 #include <QApplication>
@@ -211,7 +212,11 @@ QLabel *makeValueLabel(const QString &text = QString())
     return label;
 }
 
-void addInfoRow(QVBoxLayout *layout, const QString &title, QLabel *valueLabel)
+// 重载：接受预创建的 title 标签 + 任意 value 控件（用于设置页的 ComboBox 行）。
+// 这样后续 retranslateUi 可以直接 setText 已有 title 标签。
+// 必须声明在 (const QString&, QLabel*) 重载之前，否则该重载内调用本重载时
+// 编译器尚未看到它，会因重载决议失败而报错。
+void addInfoRow(QVBoxLayout *layout, QLabel *titleLabel, QWidget *valueWidget)
 {
     auto *row = new QWidget();
     row->setObjectName(QStringLiteral("infoRow"));
@@ -219,17 +224,22 @@ void addInfoRow(QVBoxLayout *layout, const QString &title, QLabel *valueLabel)
     rowLayout->setContentsMargins(16, 10, 16, 10);
     rowLayout->setSpacing(18);
 
-    auto *titleLabel = new QLabel(title);
     titleLabel->setObjectName(QStringLiteral("rowTitle"));
     titleLabel->setMinimumWidth(120);
     titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
-    valueLabel->setObjectName(QStringLiteral("rowValue"));
-    valueLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    valueWidget->setObjectName(QStringLiteral("rowValue"));
+    valueWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     rowLayout->addWidget(titleLabel);
-    rowLayout->addWidget(valueLabel, 1);
+    rowLayout->addWidget(valueWidget, 1);
     layout->addWidget(row);
+}
+
+void addInfoRow(QVBoxLayout *layout, const QString &title, QLabel *valueLabel)
+{
+    auto *titleLabel = new QLabel(title);
+    addInfoRow(layout, titleLabel, valueLabel);
 }
 
 QFrame *makeInfoGroup()
@@ -265,12 +275,10 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
     ui->deviceTable->setRowCount(1);
     ui->deviceTable->setItem(0, 0, new QTableWidgetItem(tr("No devices detected")));
 
-    // 默认 10 秒。
-    ui->intervalCombo->setCurrentIndex(1);
-
     setupTray();
     setupConnections();
     applyTheme();
+    loadSettingsIntoUi();
 
     // 默认图标（未知/灰色）。
     setWindowIcon(drawBatteryIcon(BatteryLevel::Unknown, 64));
@@ -284,9 +292,6 @@ MainWindow::~MainWindow()
 void MainWindow::setupPages()
 {
     auto *table = ui->deviceTable;
-    auto *intervalLabel = ui->intervalLabel;
-    auto *intervalCombo = ui->intervalCombo;
-    auto *refreshButton = ui->refreshButton;
     QWidget *central = ui->centralwidget;
     QLayout *oldLayout = central->layout();
 
@@ -329,10 +334,15 @@ void MainWindow::setupPages()
     auto *controlLayout = new QHBoxLayout(controlBar);
     controlLayout->setContentsMargins(2, 0, 2, 0);
     controlLayout->setSpacing(10);
-    controlLayout->addWidget(intervalLabel);
-    controlLayout->addWidget(intervalCombo);
     controlLayout->addStretch(1);
-    controlLayout->addWidget(refreshButton);
+    m_refreshButton = new QPushButton(tr("Refresh"));
+    m_refreshButton->setObjectName(QStringLiteral("refreshButton"));
+    m_refreshButton->setCursor(Qt::PointingHandCursor);
+    m_settingsButton = new QPushButton(tr("Settings"));
+    m_settingsButton->setObjectName(QStringLiteral("settingsButton"));
+    m_settingsButton->setCursor(Qt::PointingHandCursor);
+    controlLayout->addWidget(m_refreshButton);
+    controlLayout->addWidget(m_settingsButton);
     listLayout->addWidget(controlBar);
     m_stack->addWidget(m_listPage);
 
@@ -396,6 +406,46 @@ void MainWindow::setupPages()
     detailLayout->addStretch(1);
 
     m_stack->addWidget(m_detailPage);
+
+    // —— 设置页（堆栈第三页）——
+    m_settingsPage = new QWidget(m_stack);
+    auto *settingsLayout = new QVBoxLayout(m_settingsPage);
+    settingsLayout->setContentsMargins(0, 0, 0, 0);
+    settingsLayout->setSpacing(14);
+
+    auto *settingsNavLayout = new QHBoxLayout();
+    settingsNavLayout->setContentsMargins(0, 0, 0, 0);
+    m_settingsBackButton = new QPushButton(tr("Back"));
+    m_settingsBackButton->setObjectName(QStringLiteral("backButton"));
+    m_settingsBackButton->setCursor(Qt::PointingHandCursor);
+    settingsNavLayout->addWidget(m_settingsBackButton);
+    settingsNavLayout->addStretch(1);
+    settingsLayout->addLayout(settingsNavLayout);
+
+    m_settingsTitleLabel = new QLabel(tr("Settings"));
+    m_settingsTitleLabel->setObjectName(QStringLiteral("detailName"));
+    m_settingsTitleLabel->setWordWrap(true);
+    settingsLayout->addWidget(m_settingsTitleLabel);
+
+    auto *settingsGroup = makeInfoGroup();
+    auto *settingsGroupLayout = qobject_cast<QVBoxLayout *>(settingsGroup->layout());
+    // 行标题先建占位，retranslateUi() 中会刷新翻译。
+    m_intervalRowTitle = new QLabel(tr("Refresh interval"));
+    m_languageRowTitle = new QLabel(tr("Language"));
+    m_themeRowTitle = new QLabel(tr("Theme"));
+    m_intervalCombo = new QComboBox();
+    m_intervalCombo->setObjectName(QStringLiteral("settingsCombo"));
+    m_languageCombo = new QComboBox();
+    m_languageCombo->setObjectName(QStringLiteral("settingsCombo"));
+    m_themeCombo = new QComboBox();
+    m_themeCombo->setObjectName(QStringLiteral("settingsCombo"));
+    addInfoRow(settingsGroupLayout, m_intervalRowTitle, m_intervalCombo);
+    addInfoRow(settingsGroupLayout, m_languageRowTitle, m_languageCombo);
+    addInfoRow(settingsGroupLayout, m_themeRowTitle, m_themeCombo);
+    settingsLayout->addWidget(settingsGroup);
+    settingsLayout->addStretch(1);
+
+    m_stack->addWidget(m_settingsPage);
     m_stack->setCurrentWidget(m_listPage);
 }
 
@@ -460,6 +510,7 @@ void MainWindow::setupTray()
     auto *menu = new QMenu(this);
     m_toggleAction = menu->addAction(tr("Hide"));
     m_refreshAction = menu->addAction(tr("Refresh"));
+    m_settingsAction = menu->addAction(tr("Settings..."));
     menu->addSeparator();
     m_quitAction = menu->addAction(tr("Quit"));
 
@@ -472,10 +523,18 @@ void MainWindow::setupConnections()
     connect(m_manager, &BatteryManager::devicesUpdated,
             this, &MainWindow::onDevicesUpdated);
 
-    connect(ui->refreshButton, &QPushButton::clicked,
+    connect(m_refreshButton, &QPushButton::clicked,
             this, &MainWindow::onRefreshClicked);
-    connect(ui->intervalCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+    connect(m_settingsButton, &QPushButton::clicked,
+            this, &MainWindow::showSettingsPage);
+    connect(m_settingsBackButton, &QPushButton::clicked,
+            this, &MainWindow::showDeviceList);
+    connect(m_intervalCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &MainWindow::onIntervalChanged);
+    connect(m_languageCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onLanguageChanged);
+    connect(m_themeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onThemeChanged);
     connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
             this, &MainWindow::showDeviceDetail);
 
@@ -489,6 +548,7 @@ void MainWindow::setupConnections()
 
     connect(m_toggleAction, &QAction::triggered, this, &MainWindow::onToggleVisible);
     connect(m_refreshAction, &QAction::triggered, this, &MainWindow::onRefreshClicked);
+    connect(m_settingsAction, &QAction::triggered, this, &MainWindow::showSettingsPage);
     connect(m_quitAction, &QAction::triggered, this, &MainWindow::onQuit);
 }
 
@@ -510,9 +570,39 @@ void MainWindow::onRefreshClicked()
 
 void MainWindow::onIntervalChanged(int index)
 {
+    const int msec = intervalFromIndex(index);
+    AppSettings::setRefreshInterval(msec);
     if (m_manager) {
-        m_manager->setInterval(intervalFromIndex(index));
+        m_manager->setInterval(msec);
     }
+}
+
+void MainWindow::onLanguageChanged(int index)
+{
+    // combo 顺序：0=跟随系统，1=en，2=zh_CN。
+    QString code;
+    switch (index) {
+    case 1:  code = QStringLiteral("en"); break;
+    case 2:  code = QStringLiteral("zh_CN"); break;
+    default: code = QString(); break;  // 跟随系统
+    }
+    AppSettings::setLanguage(code);
+    // 实际切换由 main.cpp 中的全局 retranslate() 完成，通过信号触发本类刷新。
+    emit languageChanged(code);
+}
+
+void MainWindow::onThemeChanged(int index)
+{
+    // combo 顺序：0=跟随系统，1=浅色，2=深色。
+    QString theme;
+    switch (index) {
+    case 1:  theme = QStringLiteral("light"); break;
+    case 2:  theme = QStringLiteral("dark"); break;
+    default: theme = QStringLiteral("system"); break;
+    }
+    AppSettings::setTheme(theme);
+    // 实际 palette 应用由 main.cpp 中的全局 applyApplicationTheme() 完成。
+    emit themeChanged(theme);
 }
 
 void MainWindow::onTrayActivated()
@@ -605,6 +695,117 @@ void MainWindow::showDeviceList()
     if (m_stack && m_listPage) {
         m_stack->setCurrentWidget(m_listPage);
     }
+}
+
+void MainWindow::showSettingsPage()
+{
+    if (m_stack && m_settingsPage) {
+        m_stack->setCurrentWidget(m_settingsPage);
+    }
+}
+
+int MainWindow::intervalIndex(int msec) const
+{
+    switch (msec) {
+    case 5000:  return 0;
+    case 10000: return 1;
+    case 30000: return 2;
+    case 60000: return 3;
+    default:    return 1;
+    }
+}
+
+void MainWindow::loadSettingsIntoUi()
+{
+    // 先填入 combo 的可选项文本（带 tr，便于翻译）。
+    retranslateCombos();
+
+    const QSignalBlocker b1(m_intervalCombo);
+    const QSignalBlocker b2(m_languageCombo);
+    const QSignalBlocker b3(m_themeCombo);
+
+    m_intervalCombo->setCurrentIndex(intervalIndex(AppSettings::refreshInterval()));
+
+    const QString lang = AppSettings::language();
+    int langIndex = 0;
+    if (lang == QLatin1String("en")) langIndex = 1;
+    else if (lang == QLatin1String("zh_CN")) langIndex = 2;
+    m_languageCombo->setCurrentIndex(langIndex);
+
+    const QString theme = AppSettings::theme();
+    int themeIndex = 0;
+    if (theme == QLatin1String("light")) themeIndex = 1;
+    else if (theme == QLatin1String("dark")) themeIndex = 2;
+    m_themeCombo->setCurrentIndex(themeIndex);
+
+    // 让 manager 同步到持久化的间隔。
+    if (m_manager) {
+        m_manager->setInterval(AppSettings::refreshInterval());
+    }
+}
+
+void MainWindow::retranslateCombos()
+{
+    if (m_intervalCombo) {
+        m_intervalCombo->blockSignals(true);
+        // 保留当前 index，仅替换条目文本。
+        const int cur = m_intervalCombo->currentIndex();
+        m_intervalCombo->clear();
+        m_intervalCombo->addItem(tr("5 seconds"));
+        m_intervalCombo->addItem(tr("10 seconds"));
+        m_intervalCombo->addItem(tr("30 seconds"));
+        m_intervalCombo->addItem(tr("60 seconds"));
+        m_intervalCombo->setCurrentIndex(cur < 0 ? 1 : cur);
+        m_intervalCombo->blockSignals(false);
+    }
+    if (m_languageCombo) {
+        m_languageCombo->blockSignals(true);
+        const int cur = m_languageCombo->currentIndex();
+        m_languageCombo->clear();
+        m_languageCombo->addItem(tr("System"));
+        m_languageCombo->addItem(tr("English"));
+        m_languageCombo->addItem(tr("Chinese (Simplified)"));
+        m_languageCombo->setCurrentIndex(cur < 0 ? 0 : cur);
+        m_languageCombo->blockSignals(false);
+    }
+    if (m_themeCombo) {
+        m_themeCombo->blockSignals(true);
+        const int cur = m_themeCombo->currentIndex();
+        m_themeCombo->clear();
+        m_themeCombo->addItem(tr("System"));
+        m_themeCombo->addItem(tr("Light"));
+        m_themeCombo->addItem(tr("Dark"));
+        m_themeCombo->setCurrentIndex(cur < 0 ? 0 : cur);
+        m_themeCombo->blockSignals(false);
+    }
+}
+
+void MainWindow::retranslateUi()
+{
+    // 重译设置页静态控件文本。
+    if (m_refreshButton) m_refreshButton->setText(tr("Refresh"));
+    if (m_settingsButton) m_settingsButton->setText(tr("Settings"));
+    if (m_settingsBackButton) m_settingsBackButton->setText(tr("Back"));
+    if (m_settingsTitleLabel) m_settingsTitleLabel->setText(tr("Settings"));
+    if (m_intervalRowTitle) m_intervalRowTitle->setText(tr("Refresh interval"));
+    if (m_languageRowTitle) m_languageRowTitle->setText(tr("Language"));
+    if (m_themeRowTitle) m_themeRowTitle->setText(tr("Theme"));
+    retranslateCombos();
+
+    // 托盘菜单 / 图标提示。
+    if (m_toggleAction) m_toggleAction->setText(isHidden() || isMinimized() ? tr("Show") : tr("Hide"));
+    if (m_refreshAction) m_refreshAction->setText(tr("Refresh"));
+    if (m_settingsAction) m_settingsAction->setText(tr("Settings..."));
+    if (m_quitAction) m_quitAction->setText(tr("Quit"));
+    if (m_tray) m_tray->setToolTip(tr("Battery Monitor"));
+
+    // 设置窗口标题（也会随 tr 刷新）。
+    setWindowTitle(tr("Battery Monitor"));
+
+    // 重译动态内容：表格 + 详情页（其中所有可见文本都已用 tr 包装）。
+    rebuildTable(m_devices);
+    refreshDetailPage();
+    updateTray(m_devices);
 }
 
 void MainWindow::refreshDetailPage()

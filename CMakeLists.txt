@@ -56,6 +56,8 @@ qt_add_executable(BatteryMonitor
     battery/ClassicBluetoothProvider.h
     battery/XboxProvider.cpp
     battery/XboxProvider.h
+    util/AppSettings.cpp
+    util/AppSettings.h
     util/Logger.cpp
     util/Logger.h
 )

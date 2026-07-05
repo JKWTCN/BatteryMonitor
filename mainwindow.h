@@ -18,9 +18,11 @@ QT_END_NAMESPACE
 class BatteryManager;
 class QSystemTrayIcon;
 class QAction;
+class QComboBox;
 class QEvent;
 class QFrame;
 class QLabel;
+class QPushButton;
 class QStackedWidget;
 class QWidget;
 
@@ -32,6 +34,15 @@ public:
     explicit MainWindow(BatteryManager *manager, QWidget *parent = nullptr);
     ~MainWindow() override;
 
+    // 语言切换后由外部（main.cpp 的翻译控制器）调用，重填所有静态控件文本。
+    void retranslateUi();
+
+signals:
+    // 用户在设置页修改语言 / 主题时发出，由 main.cpp 中的全局控制器接收，
+    // 实际的 translator / palette 切换在那里完成，再回调用 retranslateUi()。
+    void languageChanged(const QString &code);
+    void themeChanged(const QString &theme);
+
 protected:
     // 关闭窗口时拦截为最小化到托盘，而非真正退出。
     void closeEvent(QCloseEvent *event) override;
@@ -41,6 +52,8 @@ private slots:
     void onDevicesUpdated(const QList<BatteryDevice> &devices);
     void onRefreshClicked();
     void onIntervalChanged(int index);
+    void onLanguageChanged(int index);
+    void onThemeChanged(int index);
     void onTrayActivated();
     void onToggleVisible();
     void onQuit();
@@ -53,20 +66,29 @@ private:
     void rebuildTable(const QList<BatteryDevice> &devices);
     void showDeviceDetail(int row);
     void showDeviceList();
+    void showSettingsPage();
     void refreshDetailPage();
     void updateTray(const QList<BatteryDevice> &devices);
     void notifyLowBattery(const QList<BatteryDevice> &devices);
+    // 仅重填三个设置页 combo 的可选项文本（保留当前 index）。
+    void retranslateCombos();
+    // 把已保存的设置回填到三个设置页 combo。
+    void loadSettingsIntoUi();
+    // 把间隔 msec 反查为 combo index。
+    int intervalIndex(int msec) const;
 
     Ui::MainWindow *ui;
     BatteryManager *m_manager;
     QSystemTrayIcon *m_tray = nullptr;
     QAction *m_toggleAction = nullptr;
     QAction *m_refreshAction = nullptr;
+    QAction *m_settingsAction = nullptr;
     QAction *m_quitAction = nullptr;
 
     QStackedWidget *m_stack = nullptr;
     QWidget *m_listPage = nullptr;
     QWidget *m_detailPage = nullptr;
+    QWidget *m_settingsPage = nullptr;
     QLabel *m_detailNameLabel = nullptr;
     QLabel *m_detailStatusLabel = nullptr;
     QLabel *m_detailBatteryLabel = nullptr;
@@ -80,6 +102,18 @@ private:
     QLabel *m_rightBatteryValue = nullptr;
     QLabel *m_caseBatteryValue = nullptr;
     QLabel *m_chargingValue = nullptr;
+
+    // —— 设置页控件 ——
+    QPushButton *m_refreshButton = nullptr;
+    QPushButton *m_settingsButton = nullptr;
+    QPushButton *m_settingsBackButton = nullptr;
+    QLabel *m_settingsTitleLabel = nullptr;
+    QLabel *m_intervalRowTitle = nullptr;
+    QLabel *m_languageRowTitle = nullptr;
+    QLabel *m_themeRowTitle = nullptr;
+    QComboBox *m_intervalCombo = nullptr;
+    QComboBox *m_languageCombo = nullptr;
+    QComboBox *m_themeCombo = nullptr;
 
     QList<BatteryDevice> m_devices;
     QString m_currentDetailId;

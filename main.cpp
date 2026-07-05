@@ -4,12 +4,103 @@
 #include "battery/BluetoothProvider.h"
 #include "battery/ClassicBluetoothProvider.h"
 #include "battery/XboxProvider.h"
+#include "util/AppSettings.h"
 #include "util/Logger.h"
 
 #include <QApplication>
 #include <QCoreApplication>
 #include <QLocale>
+#include <QPalette>
 #include <QTranslator>
+
+namespace
+{
+// 应用全局唯一翻译器（堆上，生命周期与 QApplication 相同）。
+// 切换语言时由 retranslate() 卸载并重新 load + install。
+QTranslator *g_translator = nullptr;
+
+// 把指定语言代码加载为当前翻译。
+//   code 为空 -> 跟随系统（依次试 QLocale::system().uiLanguages()）。
+//   code 非空 -> 直接尝试 "BatteryMonitor_<code>"。
+void retranslate(const QString &code)
+{
+    if (!g_translator) {
+        return;
+    }
+    QCoreApplication::removeTranslator(g_translator);
+
+    bool loaded = false;
+    if (code.isEmpty()) {
+        // 跟随系统：选首个能 load 的翻译。
+        const QStringList uiLanguages = QLocale::system().uiLanguages();
+        for (const QString &locale : uiLanguages) {
+            const QString baseName = "BatteryMonitor_" + QLocale(locale).name();
+            if (g_translator->load(":/i18n/" + baseName)) {
+                loaded = true;
+                break;
+            }
+        }
+    } else {
+        loaded = g_translator->load(":/i18n/BatteryMonitor_" + code);
+    }
+
+    if (loaded) {
+        QCoreApplication::installTranslator(g_translator);
+    }
+}
+
+// 构造与 mainwindow.cpp applyTheme() 中深色配色一致的深色调色板，
+// 浅色用 Qt 默认 palette。
+QPalette paletteForTheme(const QString &theme)
+{
+    if (theme == QLatin1String("dark")) {
+        QPalette pal;
+        pal.setColor(QPalette::Window, QColor(0x1c, 0x1c, 0x1e));
+        pal.setColor(QPalette::WindowText, QColor(0xf5, 0xf5, 0xf7));
+        pal.setColor(QPalette::Base, QColor(0x1c, 0x1c, 0x1e));
+        pal.setColor(QPalette::AlternateBase, QColor(0x24, 0x24, 0x26));
+        pal.setColor(QPalette::Text, QColor(0xf5, 0xf5, 0xf7));
+        pal.setColor(QPalette::Button, QColor(0x2c, 0x2c, 0x2e));
+        pal.setColor(QPalette::ButtonText, QColor(0xf5, 0xf5, 0xf7));
+        pal.setColor(QPalette::BrightText, Qt::white);
+        pal.setColor(QPalette::Highlight, QColor(0x0a, 0x84, 0xff));
+        pal.setColor(QPalette::HighlightedText, Qt::white);
+        pal.setColor(QPalette::ToolTipBase, QColor(0x2c, 0x2c, 0x2e));
+        pal.setColor(QPalette::ToolTipText, QColor(0xf5, 0xf5, 0xf7));
+        return pal;
+    }
+    if (theme == QLatin1String("light")) {
+        QPalette pal;
+        pal.setColor(QPalette::Window, QColor(0xf5, 0xf5, 0xf7));
+        pal.setColor(QPalette::WindowText, QColor(0x1d, 0x1d, 0x1f));
+        pal.setColor(QPalette::Base, QColor(0xff, 0xff, 0xff));
+        pal.setColor(QPalette::AlternateBase, QColor(0xfb, 0xfb, 0xfd));
+        pal.setColor(QPalette::Text, QColor(0x1d, 0x1d, 0x1f));
+        pal.setColor(QPalette::Button, QColor(0xff, 0xff, 0xff));
+        pal.setColor(QPalette::ButtonText, QColor(0x1d, 0x1d, 0x1f));
+        pal.setColor(QPalette::BrightText, Qt::black);
+        pal.setColor(QPalette::Highlight, QColor(0x00, 0x7a, 0xff));
+        pal.setColor(QPalette::HighlightedText, Qt::white);
+        pal.setColor(QPalette::ToolTipBase, QColor(0xff, 0xff, 0xff));
+        pal.setColor(QPalette::ToolTipText, QColor(0x1d, 0x1d, 0x1f));
+        return pal;
+    }
+    // system: 恢复 Qt 默认 palette。
+    return QPalette();
+}
+
+void applyApplicationTheme(const QString &theme)
+{
+    if (theme == QLatin1String("system")) {
+        // 让 Qt 重新采用系统 palette。
+        QApplication::setPalette(QPalette());
+    } else {
+        QApplication::setPalette(paletteForTheme(theme));
+    }
+    // QApplication::setPalette 会自动派发 ApplicationPaletteChange，
+    // MainWindow::changeEvent 会据此刷新主题与表格。
+}
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -22,15 +113,12 @@ int main(int argc, char *argv[])
     LOG_W(L"BatteryMonitor starting, exe dir: " +
           QCoreApplication::applicationDirPath().toStdWString());
 
-    QTranslator translator;
-    const QStringList uiLanguages = QLocale::system().uiLanguages();
-    for (const QString &locale : uiLanguages) {
-        const QString baseName = "BatteryMonitor_" + QLocale(locale).name();
-        if (translator.load(":/i18n/" + baseName)) {
-            a.installTranslator(&translator);
-            break;
-        }
-    }
+    // 翻译器：堆上分配，与 QApplication 同生命周期，便于运行时切换。
+    g_translator = new QTranslator(&a);
+    retranslate(AppSettings::language());
+
+    // 启动时按已保存的主题应用 application palette。
+    applyApplicationTheme(AppSettings::theme());
 
     // 聚合所有电量提供者；未来适配 USB HID 时在此追加一个 addProvider 即可。
     //   BluetoothProvider      —— BLE GATT Battery Service（BLE 耳机/手环）。
@@ -49,5 +137,16 @@ int main(int argc, char *argv[])
     w.showNormal();
     w.raise();
     w.activateWindow();
+
+    // 设置页语言/主题切换 -> 立即生效。
+    //   languageChanged: 重新 load + install translator，再回调界面重译。
+    //   themeChanged:    重新设置 application palette（changeEvent 自动联动）。
+    QObject::connect(&w, &MainWindow::languageChanged, &a, [&w](const QString &code) {
+        retranslate(code);
+        w.retranslateUi();
+    });
+    QObject::connect(&w, &MainWindow::themeChanged, &a,
+                     [](const QString &theme) { applyApplicationTheme(theme); });
+
     return QCoreApplication::exec();
 }
