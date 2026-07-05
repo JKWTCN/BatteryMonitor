@@ -64,7 +64,8 @@ target_include_directories(BatteryMonitor PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 qt_add_translations(
     TARGETS BatteryMonitor
-    TS_FILES BatteryMonitor_zh_CN.ts
+    TS_FILES lang/BatteryMonitor_zh_CN.ts
+    RESOURCE_PREFIX "/i18n"
 )
 
 target_link_libraries(BatteryMonitor
