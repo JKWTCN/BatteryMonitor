@@ -3,9 +3,10 @@
 
 #include "battery/BatteryDevice.h"
 
-#include <QMainWindow>
+#include <QDateTime>
 #include <QHash>
 #include <QList>
+#include <QMainWindow>
 #include <QSet>
 #include <QString>
 
@@ -65,6 +66,8 @@ private slots:
     void onDeviceAlertEnabledChanged(bool checked);
     // 设备信息页“低电量提醒阈值”数值被修改。
     void onDeviceThresholdChanged(int value);
+    // 设备信息页“提醒策略”下拉框被切换。
+    void onDeviceAlertPolicyChanged(int index);
 
 private:
     void setupPages();
@@ -117,9 +120,11 @@ private:
     QFrame *m_deviceSettingsGroup = nullptr;
     QLabel *m_deviceTrayRowTitle = nullptr;
     QLabel *m_deviceThresholdRowTitle = nullptr;
+    QLabel *m_deviceAlertPolicyRowTitle = nullptr;
     QCheckBox *m_deviceTrayCheck = nullptr;
     QCheckBox *m_deviceAlertCheck = nullptr;
     QSpinBox *m_deviceThresholdSpin = nullptr;
+    QComboBox *m_deviceAlertPolicyCombo = nullptr;
 
     // —— 设置页控件 ——
     QPushButton *m_refreshButton = nullptr;
@@ -138,7 +143,11 @@ private:
     bool m_applyingTheme = false;
 
     // 已提醒过一次低电量的设备 id，避免重复打扰（电量回升后才会再次提醒）。
+    // 仅 AlertPolicy::Once 使用；周期性策略改用 m_lastAlertTime 控制间隔。
     QSet<QString> m_lowBatteryNotified;
+    // 设备 id -> 上次低电量提醒的时刻（本地时间）。
+    // 用于 Always / EveryNMin 策略做节流。Once 不查这张表。
+    QHash<QString, QDateTime> m_lastAlertTime;
     // 是否已通过 closeEvent 触发过首次最小化（用于首次关闭时给用户提示）。
     bool m_trayHintShown = false;
 };

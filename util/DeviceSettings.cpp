@@ -11,6 +11,15 @@ constexpr auto kGroupDevices = "devices";
 constexpr auto kKeyTrayVisible = "TrayVisible";
 constexpr auto kKeyAlertEnabled = "LowBatteryAlert";
 constexpr auto kKeyLowBatteryThreshold = "LowBatteryThreshold";
+constexpr auto kKeyLowBatteryPolicy = "LowBatteryPolicy";
+
+// 持久化用的策略字符串。改动这些常量会破坏老设置，需谨慎。
+constexpr auto kPolicyStrOnce = "once";
+constexpr auto kPolicyStrAlways = "always";
+constexpr auto kPolicyStr5Min = "5min";
+constexpr auto kPolicyStr15Min = "15min";
+constexpr auto kPolicyStr30Min = "30min";
+constexpr auto kPolicyStr60Min = "60min";
 
 // 把设备 id 转成稳定的 hex 字符串键。
 // 用 SHA-256 的前 16 hex 位（64 bit 截断）——对几台到几十台设备的集合，
@@ -107,4 +116,49 @@ void DeviceSettings::setLowBatteryThreshold(const QString &deviceId, int percent
     // 与读取端一致：阈值范围 1..100（启用 / 关闭由独立的 AlertEnabled 控制）。
     const int clamped = qBound(1, percent, kMaxThreshold);
     QSettings().setValue(prefixFor(deviceId) + kKeyLowBatteryThreshold, clamped);
+}
+
+AlertPolicy DeviceSettings::alertPolicy(const QString &deviceId)
+{
+    if (deviceId.isEmpty()) {
+        return kDefaultAlertPolicy;
+    }
+    const QString value = QSettings()
+                          .value(prefixFor(deviceId) + kKeyLowBatteryPolicy,
+                                 policyToString(kDefaultAlertPolicy))
+                          .toString();
+    return stringToPolicy(value);
+}
+
+void DeviceSettings::setAlertPolicy(const QString &deviceId, AlertPolicy policy)
+{
+    if (deviceId.isEmpty()) {
+        return;
+    }
+    QSettings().setValue(prefixFor(deviceId) + kKeyLowBatteryPolicy,
+                         policyToString(policy));
+}
+
+QString DeviceSettings::policyToString(AlertPolicy policy)
+{
+    switch (policy) {
+    case AlertPolicy::Always:     return kPolicyStrAlways;
+    case AlertPolicy::Every5Min:  return kPolicyStr5Min;
+    case AlertPolicy::Every15Min: return kPolicyStr15Min;
+    case AlertPolicy::Every30Min: return kPolicyStr30Min;
+    case AlertPolicy::Every60Min: return kPolicyStr60Min;
+    case AlertPolicy::Once:
+    default:                      return kPolicyStrOnce;
+    }
+}
+
+AlertPolicy DeviceSettings::stringToPolicy(const QString &value)
+{
+    if (value == kPolicyStrAlways)     return AlertPolicy::Always;
+    if (value == kPolicyStr5Min)       return AlertPolicy::Every5Min;
+    if (value == kPolicyStr15Min)      return AlertPolicy::Every15Min;
+    if (value == kPolicyStr30Min)      return AlertPolicy::Every30Min;
+    if (value == kPolicyStr60Min)      return AlertPolicy::Every60Min;
+    if (value == kPolicyStrOnce)       return AlertPolicy::Once;
+    return kDefaultAlertPolicy; // 未知字符串（含空串）-> 默认。
 }

@@ -230,5 +230,39 @@
         <source>Low battery alert</source>
         <translation>低电量提醒</translation>
     </message>
+    <message>
+        <source>Repeat</source>
+        <translation>提醒频率</translation>
+    </message>
+    <message>
+        <source>Once</source>
+        <comment>alert policy</comment>
+        <translation>仅一次</translation>
+    </message>
+    <message>
+        <source>Every refresh</source>
+        <comment>alert policy</comment>
+        <translation>每次刷新</translation>
+    </message>
+    <message>
+        <source>Every 5 minutes</source>
+        <comment>alert policy</comment>
+        <translation>每 5 分钟</translation>
+    </message>
+    <message>
+        <source>Every 15 minutes</source>
+        <comment>alert policy</comment>
+        <translation>每 15 分钟</translation>
+    </message>
+    <message>
+        <source>Every 30 minutes</source>
+        <comment>alert policy</comment>
+        <translation>每 30 分钟</translation>
+    </message>
+    <message>
+        <source>Every 60 minutes</source>
+        <comment>alert policy</comment>
+        <translation>每 60 分钟</translation>
+    </message>
 </context>
 </TS>

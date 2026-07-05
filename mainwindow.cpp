@@ -235,6 +235,23 @@ bool isAtOrBelowThreshold(const BatteryDevice &device, int threshold)
     return levelRepresentativePercent(device.level) <= threshold;
 }
 
+// 策略 -> 最小重复间隔（秒）。
+//   Once   返回 -1：特殊处理（用 m_lowBatteryNotified set，不查时间戳）。
+//   Always 返回  0：不节流，每次刷新都允许提醒。
+//   周期性 返回对应秒数：距上次提醒不足该值则不提醒。
+int policyIntervalSec(AlertPolicy policy)
+{
+    switch (policy) {
+    case AlertPolicy::Always:     return 0;
+    case AlertPolicy::Every5Min:  return 5 * 60;
+    case AlertPolicy::Every15Min: return 15 * 60;
+    case AlertPolicy::Every30Min: return 30 * 60;
+    case AlertPolicy::Every60Min: return 60 * 60;
+    case AlertPolicy::Once:
+    default:                      return -1;
+    }
+}
+
 QLabel *makeValueLabel(const QString &text = QString())
 {
     auto *label = new QLabel(text);
@@ -444,6 +461,7 @@ void MainWindow::setupPages()
         qobject_cast<QVBoxLayout *>(m_deviceSettingsGroup->layout());
     m_deviceTrayRowTitle = new QLabel(tr("Show in tray"));
     m_deviceThresholdRowTitle = new QLabel(tr("Low battery alert"));
+    m_deviceAlertPolicyRowTitle = new QLabel(tr("Repeat"));
     m_deviceTrayCheck = new QCheckBox();
     m_deviceTrayCheck->setObjectName(QStringLiteral("deviceTrayCheck"));
     m_deviceAlertCheck = new QCheckBox();
@@ -454,6 +472,22 @@ void MainWindow::setupPages()
     // 因此阈值本身不再允许 0。
     m_deviceThresholdSpin->setRange(1, DeviceSettings::kMaxThreshold);
     m_deviceThresholdSpin->setSuffix(QStringLiteral("%"));
+    // 提醒策略下拉框：条目文本由 retranslateCombos() / retranslateAlertPolicyCombo()
+    // 用 tr 填充，便于翻译；index 顺序固定对应 AlertPolicy 枚举（见下方映射）。
+    m_deviceAlertPolicyCombo = new QComboBox();
+    m_deviceAlertPolicyCombo->setObjectName(QStringLiteral("deviceAlertPolicyCombo"));
+    m_deviceAlertPolicyCombo->addItem(
+        tr("Once", "alert policy"), QVariant(static_cast<int>(AlertPolicy::Once)));
+    m_deviceAlertPolicyCombo->addItem(
+        tr("Every refresh", "alert policy"), QVariant(static_cast<int>(AlertPolicy::Always)));
+    m_deviceAlertPolicyCombo->addItem(
+        tr("Every 5 minutes", "alert policy"), QVariant(static_cast<int>(AlertPolicy::Every5Min)));
+    m_deviceAlertPolicyCombo->addItem(
+        tr("Every 15 minutes", "alert policy"), QVariant(static_cast<int>(AlertPolicy::Every15Min)));
+    m_deviceAlertPolicyCombo->addItem(
+        tr("Every 30 minutes", "alert policy"), QVariant(static_cast<int>(AlertPolicy::Every30Min)));
+    m_deviceAlertPolicyCombo->addItem(
+        tr("Every 60 minutes", "alert policy"), QVariant(static_cast<int>(AlertPolicy::Every60Min)));
 
     // “低电量提醒阈值”行的 value 列是个复合控件：左为复选框（启用开关），
     // 右为阈值数值框。复选框未勾选时阈值框灰显，避免产生“勾掉却还能调”的歧义。
@@ -466,6 +500,7 @@ void MainWindow::setupPages()
 
     addInfoRow(deviceSettingsLayout, m_deviceTrayRowTitle, m_deviceTrayCheck);
     addInfoRow(deviceSettingsLayout, m_deviceThresholdRowTitle, alertValueWidget);
+    addInfoRow(deviceSettingsLayout, m_deviceAlertPolicyRowTitle, m_deviceAlertPolicyCombo);
     detailLayout->addWidget(m_deviceSettingsGroup);
     detailLayout->addStretch(1);
 
@@ -610,7 +645,7 @@ void MainWindow::setupConnections()
     connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
             this, &MainWindow::showDeviceDetail);
 
-    // 设备信息页“显示到托盘” / “启用提醒” / “阈值”变化即写盘。
+    // 设备信息页“显示到托盘” / “启用提醒” / “阈值” / “策略”变化即写盘。
     connect(m_deviceTrayCheck, &QCheckBox::toggled,
             this, &MainWindow::onDeviceTrayVisibleChanged);
     connect(m_deviceAlertCheck, &QCheckBox::toggled,
@@ -618,6 +653,9 @@ void MainWindow::setupConnections()
     connect(m_deviceThresholdSpin,
             qOverload<int>(&QSpinBox::valueChanged),
             this, &MainWindow::onDeviceThresholdChanged);
+    connect(m_deviceAlertPolicyCombo,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onDeviceAlertPolicyChanged);
 
     connect(m_tray, &QSystemTrayIcon::activated,
             this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -735,9 +773,12 @@ void MainWindow::onDeviceAlertEnabledChanged(bool checked)
         return;
     }
     DeviceSettings::setAlertEnabled(m_currentDetailId, checked);
-    // 关闭提醒后阈值框灰显；开启后可继续编辑。
+    // 关闭提醒后阈值框 + 策略下拉框灰显；开启后可继续编辑。
     if (m_deviceThresholdSpin) {
         m_deviceThresholdSpin->setEnabled(checked);
+    }
+    if (m_deviceAlertPolicyCombo) {
+        m_deviceAlertPolicyCombo->setEnabled(checked);
     }
     // notifyLowBattery 自身已具备完整状态机：
     //   - 关闭后设备会被移出 currentLow，已提醒记录随之清除；
@@ -758,6 +799,24 @@ void MainWindow::onDeviceThresholdChanged(int value)
     //   - 调低到不再低于阈值：自动从 m_lowBatteryNotified 移除，回升后能再提醒。
     // 若在这里 remove，则每按一下数值框箭头都会清掉记录，触发一次提醒，
     // 形成“调阈值过程中不停响”的现象。
+    notifyLowBattery(m_devices);
+}
+
+void MainWindow::onDeviceAlertPolicyChanged(int index)
+{
+    if (m_currentDetailId.isEmpty() || !m_deviceAlertPolicyCombo) {
+        return;
+    }
+    // combo 的每个 item 都把对应 AlertPolicy 枚举值存进 QVariant(userData)。
+    const QVariant data = m_deviceAlertPolicyCombo->itemData(index);
+    if (!data.isValid()) {
+        return;
+    }
+    const auto policy = static_cast<AlertPolicy>(data.toInt());
+    DeviceSettings::setAlertPolicy(m_currentDetailId, policy);
+    // 切换策略时清掉该设备的“上次提醒时间”，避免新策略受旧时间戳误伤：
+    //   例如从 Every5Min 切回 Once 时，旧时间戳不应再被任何分支使用。
+    m_lastAlertTime.remove(m_currentDetailId);
     notifyLowBattery(m_devices);
 }
 
@@ -925,6 +984,19 @@ void MainWindow::retranslateUi()
     // 设备信息页“设备设置”分组的标题与控件。
     if (m_deviceTrayRowTitle) m_deviceTrayRowTitle->setText(tr("Show in tray"));
     if (m_deviceThresholdRowTitle) m_deviceThresholdRowTitle->setText(tr("Low battery alert"));
+    if (m_deviceAlertPolicyRowTitle) m_deviceAlertPolicyRowTitle->setText(tr("Repeat"));
+    // 策略下拉框的条目文本需重译，但保留当前选中项与各 item 的 userData(策略枚举)。
+    if (m_deviceAlertPolicyCombo) {
+        const int cur = m_deviceAlertPolicyCombo->currentIndex();
+        const QSignalBlocker b(m_deviceAlertPolicyCombo);
+        m_deviceAlertPolicyCombo->setItemText(0, tr("Once", "alert policy"));
+        m_deviceAlertPolicyCombo->setItemText(1, tr("Every refresh", "alert policy"));
+        m_deviceAlertPolicyCombo->setItemText(2, tr("Every 5 minutes", "alert policy"));
+        m_deviceAlertPolicyCombo->setItemText(3, tr("Every 15 minutes", "alert policy"));
+        m_deviceAlertPolicyCombo->setItemText(4, tr("Every 30 minutes", "alert policy"));
+        m_deviceAlertPolicyCombo->setItemText(5, tr("Every 60 minutes", "alert policy"));
+        m_deviceAlertPolicyCombo->setCurrentIndex(cur);
+    }
 
     // 设置窗口标题（也会随 tr 刷新）。
     setWindowTitle(tr("Battery Monitor"));
@@ -977,16 +1049,29 @@ void MainWindow::refreshDetailPage()
     }
 
     // —— 回填设备级设置（屏蔽信号，避免回调写盘）——
-    if (m_deviceTrayCheck && m_deviceAlertCheck && m_deviceThresholdSpin) {
+    if (m_deviceTrayCheck && m_deviceAlertCheck && m_deviceThresholdSpin &&
+        m_deviceAlertPolicyCombo) {
         const QSignalBlocker b1(m_deviceTrayCheck);
         const QSignalBlocker b2(m_deviceAlertCheck);
         const QSignalBlocker b3(m_deviceThresholdSpin);
+        const QSignalBlocker b4(m_deviceAlertPolicyCombo);
         m_deviceTrayCheck->setChecked(DeviceSettings::trayVisible(id));
         const bool alertOn = DeviceSettings::alertEnabled(id);
         m_deviceAlertCheck->setChecked(alertOn);
         m_deviceThresholdSpin->setValue(DeviceSettings::lowBatteryThreshold(id));
-        // 复选框未勾选时阈值框灰显。
+        // 复选框未勾选时阈值框 + 策略下拉框一并灰显（提醒都关了，策略也无意义）。
         m_deviceThresholdSpin->setEnabled(alertOn);
+        m_deviceAlertPolicyCombo->setEnabled(alertOn);
+        // 找到 itemData 等于当前策略的下标。
+        const auto currentPolicy = static_cast<int>(DeviceSettings::alertPolicy(id));
+        int policyIndex = 0;
+        for (int i = 0; i < m_deviceAlertPolicyCombo->count(); ++i) {
+            if (m_deviceAlertPolicyCombo->itemData(i).toInt() == currentPolicy) {
+                policyIndex = i;
+                break;
+            }
+        }
+        m_deviceAlertPolicyCombo->setCurrentIndex(policyIndex);
     }
 }
 
@@ -1105,9 +1190,9 @@ void MainWindow::updateTray(const QList<BatteryDevice> &devices)
 
 void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
 {
-    // 收集当前“达到各自阈值”的设备。
-    // 是否启用与阈值都是每台设备独立配置（DeviceSettings）：
-    //   默认启用 + 阈值 20%；未启用 alert 的设备永远不进 currentLow。
+    // —— 第一步：确定当前哪些设备“低于阈值”，同时拿到每台设备的策略 ——
+    // currentLow: 本轮刷新中，达到提醒条件的设备集合（启用 alert 且电量 ≤ 阈值）。
+    // 同时为每台设备读取策略，下面会按策略分流决定是否真的弹通知。
     QSet<QString> currentLow;
     for (const auto &device : devices) {
         const QString id = QString::fromStdWString(device.id);
@@ -1120,28 +1205,58 @@ void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
         }
     }
 
-    // 新出现的低电量设备 -> 提醒一次。
-    for (const auto &device : devices) {
-        const QString id = QString::fromStdWString(device.id);
-        if (!currentLow.contains(id)) {
-            continue;
-        }
-        if (m_lowBatteryNotified.contains(id)) {
-            continue;
-        }
-        m_lowBatteryNotified.insert(id);
-        m_tray->showMessage(
-            tr("Low Battery"),
-            tr("%1: %2").arg(QString::fromStdWString(device.name), batteryText(device)),
-            QSystemTrayIcon::Warning, 4000);
-    }
-
-    // 电量回升（或被取消勾选提醒阈值）后清掉记录，下次再低可以再次提醒。
+    // —— 第二步：电量回升的设备清理状态 ——
+    // 对所有策略统一适用：不再低于阈值时，重置它的“已提醒/时间戳”，
+    // 这样下次再次跌破阈值时会重新走一次完整的提醒判断。
     for (auto it = m_lowBatteryNotified.begin(); it != m_lowBatteryNotified.end();) {
         if (!currentLow.contains(*it)) {
             it = m_lowBatteryNotified.erase(it);
         } else {
             ++it;
+        }
+    }
+    for (auto it = m_lastAlertTime.begin(); it != m_lastAlertTime.end();) {
+        if (!currentLow.contains(it.key())) {
+            it = m_lastAlertTime.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // —— 第三步：对仍处于低电量的设备，按各自策略决定是否弹通知 ——
+    for (const auto &device : devices) {
+        const QString id = QString::fromStdWString(device.id);
+        if (!currentLow.contains(id)) {
+            continue;
+        }
+        const AlertPolicy policy = DeviceSettings::alertPolicy(id);
+        const int intervalSec = policyIntervalSec(policy);
+
+        // 策略分流：判断“本次是否应该提醒”。
+        bool shouldNotify = false;
+        if (intervalSec < 0) {
+            // Once：首次跌破阈值时提醒一次，记录在 set 里，回升前不再响。
+            if (!m_lowBatteryNotified.contains(id)) {
+                shouldNotify = true;
+                m_lowBatteryNotified.insert(id);
+            }
+        } else {
+            // Always（0）/ 周期（>0）：基于“上次提醒时刻”节流。
+            const QDateTime now = QDateTime::currentDateTime();
+            const auto it = m_lastAlertTime.constFind(id);
+            const bool due = (it == m_lastAlertTime.constEnd())
+                || (it.value().secsTo(now) >= intervalSec);
+            if (due) {
+                shouldNotify = true;
+                m_lastAlertTime.insert(id, now);
+            }
+        }
+
+        if (shouldNotify) {
+            m_tray->showMessage(
+                tr("Low Battery"),
+                tr("%1: %2").arg(QString::fromStdWString(device.name), batteryText(device)),
+                QSystemTrayIcon::Warning, 4000);
         }
     }
 }
