@@ -46,6 +46,8 @@ int main(int argc, char *argv[])
     manager.start();
 
     MainWindow w(&manager);
-    w.show();
+    w.showNormal();
+    w.raise();
+    w.activateWindow();
     return QCoreApplication::exec();
 }

@@ -7,17 +7,25 @@
 #include <QApplication>
 #include <QCloseEvent>
 #include <QColor>
+#include <QEvent>
+#include <QFrame>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QIcon>
-#include <QLinearGradient>
+#include <QLayout>
+#include <QLayoutItem>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPalette>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QComboBox>
+#include <QSizePolicy>
+#include <QStackedWidget>
 #include <QSystemTrayIcon>
+#include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 #include <QLabel>
@@ -182,6 +190,57 @@ int intervalFromIndex(int index)
     default: return 10000;
     }
 }
+
+QString percentText(int value)
+{
+    return value >= 0 ? QString::number(value) + QLatin1Char('%')
+                      : MainWindow::tr("Unknown");
+}
+
+QString yesNoText(bool value)
+{
+    return value ? MainWindow::tr("Yes") : MainWindow::tr("No");
+}
+
+QLabel *makeValueLabel(const QString &text = QString())
+{
+    auto *label = new QLabel(text);
+    label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    label->setWordWrap(true);
+    label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    return label;
+}
+
+void addInfoRow(QVBoxLayout *layout, const QString &title, QLabel *valueLabel)
+{
+    auto *row = new QWidget();
+    row->setObjectName(QStringLiteral("infoRow"));
+    auto *rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(16, 10, 16, 10);
+    rowLayout->setSpacing(18);
+
+    auto *titleLabel = new QLabel(title);
+    titleLabel->setObjectName(QStringLiteral("rowTitle"));
+    titleLabel->setMinimumWidth(120);
+    titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    valueLabel->setObjectName(QStringLiteral("rowValue"));
+    valueLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+
+    rowLayout->addWidget(titleLabel);
+    rowLayout->addWidget(valueLabel, 1);
+    layout->addWidget(row);
+}
+
+QFrame *makeInfoGroup()
+{
+    auto *group = new QFrame();
+    group->setObjectName(QStringLiteral("detailGroup"));
+    auto *layout = new QVBoxLayout(group);
+    layout->setContentsMargins(0, 4, 0, 4);
+    layout->setSpacing(0);
+    return group;
+}
 } // namespace
 
 MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
@@ -190,6 +249,8 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
     , m_manager(manager)
 {
     ui->setupUi(this);
+    setupPages();
+    setMinimumSize(560, 380);
 
     // 表格基础外观。
     ui->deviceTable->setColumnCount(4);
@@ -198,6 +259,9 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
     ui->deviceTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     ui->deviceTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
     ui->deviceTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    ui->deviceTable->verticalHeader()->setDefaultSectionSize(56);
+    ui->deviceTable->setShowGrid(false);
+    ui->deviceTable->setAlternatingRowColors(false);
     ui->deviceTable->setRowCount(1);
     ui->deviceTable->setItem(0, 0, new QTableWidgetItem(tr("No devices detected")));
 
@@ -206,6 +270,7 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
 
     setupTray();
     setupConnections();
+    applyTheme();
 
     // 默认图标（未知/灰色）。
     setWindowIcon(drawBatteryIcon(BatteryLevel::Unknown, 64));
@@ -214,6 +279,177 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
+}
+
+void MainWindow::setupPages()
+{
+    auto *table = ui->deviceTable;
+    auto *intervalLabel = ui->intervalLabel;
+    auto *intervalCombo = ui->intervalCombo;
+    auto *refreshButton = ui->refreshButton;
+    QWidget *central = ui->centralwidget;
+    QLayout *oldLayout = central->layout();
+
+    if (oldLayout) {
+        while (QLayoutItem *item = oldLayout->takeAt(0)) {
+            if (QWidget *widget = item->widget()) {
+                widget->setParent(nullptr);
+            } else if (QLayout *childLayout = item->layout()) {
+                while (QLayoutItem *childItem = childLayout->takeAt(0)) {
+                    if (QWidget *widget = childItem->widget()) {
+                        widget->setParent(nullptr);
+                    }
+                    delete childItem;
+                }
+            }
+            delete item;
+        }
+    }
+
+    central->setObjectName(QStringLiteral("centralwidget"));
+    auto *rootLayout = oldLayout ? qobject_cast<QVBoxLayout *>(oldLayout) : nullptr;
+    if (!rootLayout) {
+        rootLayout = new QVBoxLayout(central);
+    }
+    rootLayout->setContentsMargins(18, 18, 18, 18);
+    rootLayout->setSpacing(0);
+
+    m_stack = new QStackedWidget(central);
+    m_stack->setObjectName(QStringLiteral("contentStack"));
+    rootLayout->addWidget(m_stack);
+
+    m_listPage = new QWidget(m_stack);
+    auto *listLayout = new QVBoxLayout(m_listPage);
+    listLayout->setContentsMargins(0, 0, 0, 0);
+    listLayout->setSpacing(12);
+    listLayout->addWidget(table, 1);
+
+    auto *controlBar = new QWidget(m_listPage);
+    controlBar->setObjectName(QStringLiteral("controlBar"));
+    auto *controlLayout = new QHBoxLayout(controlBar);
+    controlLayout->setContentsMargins(2, 0, 2, 0);
+    controlLayout->setSpacing(10);
+    controlLayout->addWidget(intervalLabel);
+    controlLayout->addWidget(intervalCombo);
+    controlLayout->addStretch(1);
+    controlLayout->addWidget(refreshButton);
+    listLayout->addWidget(controlBar);
+    m_stack->addWidget(m_listPage);
+
+    m_detailPage = new QWidget(m_stack);
+    auto *detailLayout = new QVBoxLayout(m_detailPage);
+    detailLayout->setContentsMargins(0, 0, 0, 0);
+    detailLayout->setSpacing(14);
+
+    auto *navLayout = new QHBoxLayout();
+    navLayout->setContentsMargins(0, 0, 0, 0);
+    auto *backButton = new QPushButton(tr("Back"));
+    backButton->setObjectName(QStringLiteral("backButton"));
+    backButton->setCursor(Qt::PointingHandCursor);
+    navLayout->addWidget(backButton);
+    navLayout->addStretch(1);
+    detailLayout->addLayout(navLayout);
+    connect(backButton, &QPushButton::clicked, this, &MainWindow::showDeviceList);
+
+    m_detailNameLabel = new QLabel();
+    m_detailNameLabel->setObjectName(QStringLiteral("detailName"));
+    m_detailNameLabel->setWordWrap(true);
+    detailLayout->addWidget(m_detailNameLabel);
+
+    auto *summaryLayout = new QHBoxLayout();
+    summaryLayout->setContentsMargins(0, 0, 0, 0);
+    summaryLayout->setSpacing(10);
+    m_detailBatteryLabel = new QLabel();
+    m_detailBatteryLabel->setObjectName(QStringLiteral("detailBattery"));
+    m_detailStatusLabel = new QLabel();
+    m_detailStatusLabel->setObjectName(QStringLiteral("detailStatus"));
+    summaryLayout->addWidget(m_detailBatteryLabel);
+    summaryLayout->addWidget(m_detailStatusLabel);
+    summaryLayout->addStretch(1);
+    detailLayout->addLayout(summaryLayout);
+
+    auto *overviewGroup = makeInfoGroup();
+    auto *overviewLayout = qobject_cast<QVBoxLayout *>(overviewGroup->layout());
+    m_detailTypeValue = makeValueLabel();
+    m_detailStateValue = makeValueLabel();
+    m_detailBatteryValue = makeValueLabel();
+    m_detailWiredValue = makeValueLabel();
+    m_detailIdValue = makeValueLabel();
+    addInfoRow(overviewLayout, tr("Type"), m_detailTypeValue);
+    addInfoRow(overviewLayout, tr("Status"), m_detailStateValue);
+    addInfoRow(overviewLayout, tr("Battery"), m_detailBatteryValue);
+    addInfoRow(overviewLayout, tr("Wired"), m_detailWiredValue);
+    addInfoRow(overviewLayout, tr("Device ID"), m_detailIdValue);
+    detailLayout->addWidget(overviewGroup);
+
+    m_airPodsGroup = makeInfoGroup();
+    auto *airPodsLayout = qobject_cast<QVBoxLayout *>(m_airPodsGroup->layout());
+    m_leftBatteryValue = makeValueLabel();
+    m_rightBatteryValue = makeValueLabel();
+    m_caseBatteryValue = makeValueLabel();
+    m_chargingValue = makeValueLabel();
+    addInfoRow(airPodsLayout, tr("Left battery"), m_leftBatteryValue);
+    addInfoRow(airPodsLayout, tr("Right battery"), m_rightBatteryValue);
+    addInfoRow(airPodsLayout, tr("Case battery"), m_caseBatteryValue);
+    addInfoRow(airPodsLayout, tr("Charging"), m_chargingValue);
+    detailLayout->addWidget(m_airPodsGroup);
+    detailLayout->addStretch(1);
+
+    m_stack->addWidget(m_detailPage);
+    m_stack->setCurrentWidget(m_listPage);
+}
+
+void MainWindow::applyTheme()
+{
+    if (m_applyingTheme) {
+        return;
+    }
+    m_applyingTheme = true;
+
+    const QPalette pal = QApplication::palette();
+    const bool dark = pal.color(QPalette::Window).lightness() < 128;
+
+    const QString base = dark ? QStringLiteral("#1c1c1e") : QStringLiteral("#f5f5f7");
+    const QString group = dark ? QStringLiteral("#2c2c2e") : QStringLiteral("#ffffff");
+    const QString groupAlt = dark ? QStringLiteral("#242426") : QStringLiteral("#fbfbfd");
+    const QString text = dark ? QStringLiteral("#f5f5f7") : QStringLiteral("#1d1d1f");
+    const QString secondary = dark ? QStringLiteral("#a1a1a6") : QStringLiteral("#6e6e73");
+    const QString border = dark ? QStringLiteral("#3a3a3c") : QStringLiteral("#d8d8dc");
+    const QString hover = dark ? QStringLiteral("#343438") : QStringLiteral("#eeeeef");
+    const QString accent = dark ? QStringLiteral("#0a84ff") : QStringLiteral("#007aff");
+
+    setStyleSheet(QStringLiteral(
+        "QWidget#centralwidget { background: %1; color: %4; }"
+        "QWidget { color: %4; font-size: 10pt; }"
+        "QStackedWidget#contentStack { background: transparent; }"
+        "QTableWidget { background: %2; border: 1px solid %6; border-radius: 12px;"
+        "  padding: 4px; gridline-color: transparent; outline: none; }"
+        "QTableWidget::item { border: none; padding: 8px 10px; }"
+        "QTableWidget::item:hover { background: %7; border-radius: 8px; }"
+        "QHeaderView::section { background: %3; color: %5; border: none;"
+        "  border-bottom: 1px solid %6; padding: 8px 10px; font-weight: 600; }"
+        "QWidget#controlBar { background: transparent; }"
+        "QLabel { color: %4; }"
+        "QLabel#detailName { font-size: 23pt; font-weight: 700; }"
+        "QLabel#detailBattery { color: %8; font-size: 12pt; font-weight: 700; }"
+        "QLabel#detailStatus { color: %5; font-size: 12pt; }"
+        "QLabel#rowTitle { color: %4; }"
+        "QLabel#rowValue { color: %5; }"
+        "QFrame#detailGroup { background: %2; border: 1px solid %6; border-radius: 12px; }"
+        "QWidget#infoRow { background: transparent; }"
+        "QPushButton { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
+        "  padding: 7px 14px; font-weight: 600; }"
+        "QPushButton:hover { background: %7; }"
+        "QPushButton#backButton { background: transparent; color: %8; border: none;"
+        "  padding: 6px 2px; font-weight: 600; }"
+        "QComboBox { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
+        "  padding: 6px 28px 6px 10px; }"
+        "QComboBox:hover { background: %7; }"
+        "QComboBox QAbstractItemView { background: %2; color: %4; border: 1px solid %6;"
+        "  selection-background-color: %8; selection-color: white; }")
+        .arg(base, group, groupAlt, text, secondary, border, hover, accent));
+
+    m_applyingTheme = false;
 }
 
 void MainWindow::setupTray()
@@ -240,6 +476,8 @@ void MainWindow::setupConnections()
             this, &MainWindow::onRefreshClicked);
     connect(ui->intervalCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &MainWindow::onIntervalChanged);
+    connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
+            this, &MainWindow::showDeviceDetail);
 
     connect(m_tray, &QSystemTrayIcon::activated,
             this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -256,7 +494,9 @@ void MainWindow::setupConnections()
 
 void MainWindow::onDevicesUpdated(const QList<BatteryDevice> &devices)
 {
+    m_devices = devices;
     rebuildTable(devices);
+    refreshDetailPage();
     updateTray(devices);
     notifyLowBattery(devices);
 }
@@ -327,11 +567,95 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QMainWindow::closeEvent(event);
 }
 
+void MainWindow::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
+    if (m_applyingTheme) {
+        return;
+    }
+    if (event->type() == QEvent::ApplicationPaletteChange) {
+        applyTheme();
+        rebuildTable(m_devices);
+        refreshDetailPage();
+    }
+}
+
+void MainWindow::showDeviceDetail(int row)
+{
+    if (row < 0 || row >= m_devices.size()) {
+        return;
+    }
+
+    const BatteryDevice &device = m_devices.at(row);
+    const QString id = QString::fromStdWString(device.id);
+    if (id.isEmpty()) {
+        return;
+    }
+
+    m_currentDetailId = id;
+    refreshDetailPage();
+    if (m_stack && m_detailPage) {
+        m_stack->setCurrentWidget(m_detailPage);
+    }
+}
+
+void MainWindow::showDeviceList()
+{
+    m_currentDetailId.clear();
+    if (m_stack && m_listPage) {
+        m_stack->setCurrentWidget(m_listPage);
+    }
+}
+
+void MainWindow::refreshDetailPage()
+{
+    if (m_currentDetailId.isEmpty()) {
+        return;
+    }
+
+    const BatteryDevice *current = nullptr;
+    for (const auto &device : m_devices) {
+        if (QString::fromStdWString(device.id) == m_currentDetailId) {
+            current = &device;
+            break;
+        }
+    }
+
+    if (!current) {
+        showDeviceList();
+        return;
+    }
+
+    const BatteryDevice &device = *current;
+    const QString name = QString::fromStdWString(device.name);
+    const QString id = QString::fromStdWString(device.id);
+    const bool isAirPods = device.subType == BatteryDevice::SubType::AirPods;
+
+    m_detailNameLabel->setText(name.isEmpty() ? tr("Unknown device") : name);
+    m_detailBatteryLabel->setText(batteryText(device));
+    m_detailStatusLabel->setText(statusText(device));
+    m_detailTypeValue->setText(BatteryManager::typeLabel(device.type));
+    m_detailStateValue->setText(statusText(device));
+    m_detailBatteryValue->setText(batteryText(device));
+    m_detailWiredValue->setText(yesNoText(device.wired));
+    m_detailIdValue->setText(id.isEmpty() ? tr("Unknown") : id);
+
+    m_airPodsGroup->setVisible(isAirPods);
+    if (isAirPods) {
+        m_leftBatteryValue->setText(percentText(device.leftPercent));
+        m_rightBatteryValue->setText(percentText(device.rightPercent));
+        m_caseBatteryValue->setText(percentText(device.casePercent));
+        m_chargingValue->setText(yesNoText(device.charging));
+    }
+}
+
 void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
 {
     QTableWidget *table = ui->deviceTable;
 
     if (devices.isEmpty()) {
+        table->clearContents();
+        table->clearSpans();
         table->setRowCount(1);
         // 占位提示跨整行显示。
         auto *placeholder = new QTableWidgetItem(tr("No devices detected"));
@@ -347,6 +671,7 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
     }
 
     table->clearSpans();
+    table->clearContents();
     table->setRowCount(static_cast<int>(devices.size()));
 
     for (int row = 0; row < devices.size(); ++row) {
@@ -371,17 +696,20 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
         bar->setFixedHeight(16);
 
         // 进度条配色（通过 stylesheet 设置 chunk 颜色）。
-        const QColor color = device.wired ? QColor(120, 120, 120) : levelColor(device.level);
+        const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
+        const QColor color = device.wired ? QColor(142, 142, 147) : levelColor(device.level);
+        const QString trackColor = dark ? QStringLiteral("#3a3a3c") : QStringLiteral("#e5e5ea");
         bar->setStyleSheet(QStringLiteral(
-            "QProgressBar { background: #2a2d33; border-radius: 6px; }"
-            "QProgressBar::chunk { background: %1; border-radius: 6px; }")
-            .arg(color.name()));
+            "QProgressBar { background: %1; border-radius: 6px; }"
+            "QProgressBar::chunk { background: %2; border-radius: 6px; }")
+            .arg(trackColor, color.name()));
 
         // 用标签文字叠加在进度条上显示百分比 / 档位 / 有线。
         auto *overlay = new QLabel(batteryText(device));
         overlay->setAlignment(Qt::AlignCenter);
+        const QString overlayColor = dark ? QStringLiteral("#f5f5f7") : QStringLiteral("#1d1d1f");
         overlay->setStyleSheet(QStringLiteral("color: %1; font-weight: 600;")
-            .arg(device.wired ? "#cfd3da" : "#ffffff"));
+            .arg(overlayColor));
 
         auto *cell = new QWidget();
         auto *cellLayout = new QVBoxLayout(cell);

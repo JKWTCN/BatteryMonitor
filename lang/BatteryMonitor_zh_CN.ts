@@ -142,5 +142,41 @@
         <source>%1: %2</source>
         <translation>%1：%2</translation>
     </message>
+    <message>
+        <source>Back</source>
+        <translation>返回</translation>
+    </message>
+    <message>
+        <source>Yes</source>
+        <translation>是</translation>
+    </message>
+    <message>
+        <source>No</source>
+        <translation>否</translation>
+    </message>
+    <message>
+        <source>Device ID</source>
+        <translation>设备 ID</translation>
+    </message>
+    <message>
+        <source>Left battery</source>
+        <translation>左耳电量</translation>
+    </message>
+    <message>
+        <source>Right battery</source>
+        <translation>右耳电量</translation>
+    </message>
+    <message>
+        <source>Case battery</source>
+        <translation>充电盒电量</translation>
+    </message>
+    <message>
+        <source>Charging</source>
+        <translation>正在充电</translation>
+    </message>
+    <message>
+        <source>Unknown device</source>
+        <translation>未知设备</translation>
+    </message>
 </context>
 </TS>
