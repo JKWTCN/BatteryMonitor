@@ -186,7 +186,7 @@ void AirPodsProvider::onAdvertisementReceived(
                 d.rssi = rssi;
                 d.lastSeen = std::chrono::steady_clock::now();
             }
-            LOG_W(L"[AirPods] RX " + name + L" L=" + std::to_wstring(left) +
+            LOG_VERBOSE_W(L"[AirPods] RX " + name + L" L=" + std::to_wstring(left) +
                   L"% R=" + std::to_wstring(right) + L"% Case=" +
                   std::to_wstring(casePct) + L"% rssi=" + std::to_wstring(rssi) +
                   L"dBm");
@@ -257,7 +257,7 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
         std::lock_guard<std::mutex> lock(m_mutex);
         for (auto it = m_devices.begin(); it != m_devices.end();) {
             if (now - it->second.lastSeen > kStaleTimeout) {
-                LOG_W(L"[AirPods] drop stale device: " + it->second.name);
+                LOG_VERBOSE_W(L"[AirPods] drop stale device: " + it->second.name);
                 it = m_devices.erase(it);
             } else {
                 snapshot.emplace_back(it->first, it->second);
@@ -289,6 +289,6 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
         devices.push_back(std::move(device));
     }
 
-    LOG_W(L"[AirPods] readDevices total = " + std::to_wstring(devices.size()));
+    LOG_VERBOSE_W(L"[AirPods] readDevices total = " + std::to_wstring(devices.size()));
     return devices;
 }

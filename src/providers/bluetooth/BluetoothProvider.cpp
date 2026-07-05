@@ -129,7 +129,7 @@ void readPowerBatteryDevices(std::vector<BatteryDevice> &devices,
     const auto selector = Battery::GetDeviceSelector();
     const auto pbStart = SteadyClock::now();
     const auto found = DeviceInformation::FindAllAsync(selector).get();
-    LOG_W(L"[Bluetooth] Power::Battery FindAllAsync took " +
+    LOG_VERBOSE_W(L"[Bluetooth] Power::Battery FindAllAsync took " +
           toWString(static_cast<int>(elapsedMs(pbStart))) + L"ms, found " +
           toWString(static_cast<int>(found.Size())) + L" battery devices");
 
@@ -137,15 +137,15 @@ void readPowerBatteryDevices(std::vector<BatteryDevice> &devices,
         const std::wstring id = toWString(device.Id());
         std::wstring name = toWString(device.Name());
 
-        LOG_W(L"[Bluetooth] Power::Battery device raw: name=\"" + name +
+        LOG_VERBOSE_W(L"[Bluetooth] Power::Battery device raw: name=\"" + name +
               L"\" id=\"" + id + L"\"");
 
         if (id.empty()) {
-            LOG_W(L"[Bluetooth] Power::Battery skipped: empty id");
+            LOG_VERBOSE_W(L"[Bluetooth] Power::Battery skipped: empty id");
             continue;
         }
         if (looksLikeSystemBattery(name, id)) {
-            LOG_W(L"[Bluetooth] Power::Battery skipped: looks like system battery");
+            LOG_VERBOSE_W(L"[Bluetooth] Power::Battery skipped: looks like system battery");
             continue;
         }
         if (name.empty()) {
@@ -158,12 +158,12 @@ void readPowerBatteryDevices(std::vector<BatteryDevice> &devices,
 
         const auto battery = Battery::FromIdAsync(device.Id()).get();
         if (!battery) {
-            LOG_W(L"[Bluetooth] Power::Battery skipped: FromIdAsync returned null");
+            LOG_VERBOSE_W(L"[Bluetooth] Power::Battery skipped: FromIdAsync returned null");
             continue;
         }
         const auto percentage = readPercentage(battery);
         if (!percentage) {
-            LOG_W(L"[Bluetooth] Power::Battery skipped: readPercentage returned empty");
+            LOG_VERBOSE_W(L"[Bluetooth] Power::Battery skipped: readPercentage returned empty");
             continue;
         }
 
@@ -181,7 +181,7 @@ void readPowerBatteryDevices(std::vector<BatteryDevice> &devices,
         devices.push_back(std::move(entry));
         seenIds.insert(id);
 
-        LOG_W(L"[Bluetooth] Power::Battery device: " + entry.name +
+        LOG_VERBOSE_W(L"[Bluetooth] Power::Battery device: " + entry.name +
               L" = " + toWString(*percentage) + L"%");
     }
 }
@@ -338,7 +338,7 @@ std::vector<BatteryDevice> BluetoothProvider::readDevices()
         // 但 worker 是独立线程，应有自己的 apartment。
         try {
             winrt::init_apartment(winrt::apartment_type::multi_threaded);
-            LOG("[Bluetooth] apartment init OK (multi_threaded)");
+            LOG_VERBOSE("[Bluetooth] apartment init OK (multi_threaded)");
         } catch (const winrt::hresult_error &e) {
             LOG_ERR_W(L"[Bluetooth] apartment init FAILED: " + toWString(e.message()));
         } catch (...) {
@@ -385,7 +385,7 @@ std::vector<BatteryDevice> BluetoothProvider::readDevices()
         const auto deviceInfos = DeviceInformation::FindAllAsync(
             selector, iterableProps).get();
 
-        LOG_W(L"[Bluetooth] GATT FindAllAsync took " +
+        LOG_VERBOSE_W(L"[Bluetooth] GATT FindAllAsync took " +
               toWString(static_cast<int>(elapsedMs(gattStart))) + L"ms, found " +
               toWString(static_cast<int>(deviceInfos.Size())) + L" LE devices");
 
@@ -395,15 +395,15 @@ std::vector<BatteryDevice> BluetoothProvider::readDevices()
             const bool isConnected = boolProperty(
                 deviceInfo, hstring(L"System.Devices.Aep.IsConnected"), false);
             // 每设备诊断日志：看清 6 台设备各自的状态，定位为何读不到电量。
-            LOG_W(L"[Bluetooth] GATT device: name=\"" + devName + L"\" connected=" +
+            LOG_VERBOSE_W(L"[Bluetooth] GATT device: name=\"" + devName + L"\" connected=" +
                   (isConnected ? L"true" : L"false") + L" id=\"" + deviceId + L"\"");
             if (seenIds.count(deviceId)) {
-                LOG_W(L"[Bluetooth] GATT skip (seen in Power::Battery): " + devName);
+                LOG_VERBOSE_W(L"[Bluetooth] GATT skip (seen in Power::Battery): " + devName);
                 continue;
             }
             // 关键：用属性判断连接状态，而不是依赖 selector。
             if (!isConnected) {
-                LOG_W(L"[Bluetooth] GATT skip (not connected): " + devName);
+                LOG_VERBOSE_W(L"[Bluetooth] GATT skip (not connected): " + devName);
                 continue;
             }
 
@@ -414,7 +414,7 @@ std::vector<BatteryDevice> BluetoothProvider::readDevices()
             } catch (const winrt::hresult_error &) {
                 bluetoothDevice = nullptr;
             }
-            LOG_W(L"[Bluetooth] GATT FromIdAsync for " + devName + L" took " +
+            LOG_VERBOSE_W(L"[Bluetooth] GATT FromIdAsync for " + devName + L" took " +
                   toWString(static_cast<int>(elapsedMs(fromIdStart))) + L"ms");
             if (!bluetoothDevice) {
                 LOG_WARN_W(L"[Bluetooth] GATT FromIdAsync returned null: " + devName);
@@ -435,7 +435,7 @@ std::vector<BatteryDevice> BluetoothProvider::readDevices()
             if (!servicesResult ||
                 servicesResult.Status() != GattCommunicationStatus::Success ||
                 servicesResult.Services().Size() == 0) {
-                LOG_W(L"[Bluetooth] GATT no Battery svc: " + devName);
+                LOG_VERBOSE_W(L"[Bluetooth] GATT no Battery svc: " + devName);
                 continue;
             }
 
@@ -455,11 +455,11 @@ std::vector<BatteryDevice> BluetoothProvider::readDevices()
                 for (const auto &characteristic : characteristicsResult.Characteristics()) {
                     const auto percentage = readGattBatteryLevel(characteristic);
                     if (!percentage) {
-                        LOG_W(L"[Bluetooth] GATT read battery level failed: " + devName);
+                        LOG_VERBOSE_W(L"[Bluetooth] GATT read battery level failed: " + devName);
                         continue;
                     }
 
-                    LOG_W(L"[Bluetooth] GATT battery found: " + devName + L" = " +
+                    LOG_VERBOSE_W(L"[Bluetooth] GATT battery found: " + devName + L" = " +
                           toWString(*percentage) + L"%");
                     BatteryDevice device;
                     device.id = deviceId;
@@ -494,6 +494,6 @@ std::vector<BatteryDevice> BluetoothProvider::readDevices()
         LOG_ERR("[Bluetooth] refresh failed (unknown exception)");
     }
 
-    LOG_W(L"[Bluetooth] readDevices total = " + toWString(static_cast<int>(devices.size())));
+    LOG_VERBOSE_W(L"[Bluetooth] readDevices total = " + toWString(static_cast<int>(devices.size())));
     return devices;
 }

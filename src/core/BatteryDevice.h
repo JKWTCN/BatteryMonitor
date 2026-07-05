@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#include <QtGlobal> // qint64
+
 // 统一的电量档位。所有设备都有 level，用于着色 / 托盘 / 排序 / 低电量提醒。
 // 档位取值参考 XInput 的离散电量状态；蓝牙的精确百分比会派生到对应的档位。
 enum class BatteryLevel
@@ -20,11 +22,13 @@ enum class BatteryLevel
 // Qt 边界（BatteryManager / MainWindow）在需要时把 std::wstring 转 QString。
 struct BatteryDevice
 {
-    // 设备类别。未来适配 USB HID 时在此追加 UsbHid。
+    // 设备类别。
     enum class Type
     {
         Bluetooth,
-        Xbox
+        Xbox,
+        // USB / 2.4G 接收器走 HID 协议的设备（AULA 键盘 / 鼠标等）。
+        Hid
     };
 
     // 设备子类别。用于区分同 Type 下的不同展示形态：
@@ -72,6 +76,15 @@ struct BatteryDevice
 
     // 设备当前是否在线。
     bool connected = false;
+
+    // —— 粘性缓存字段（仅 BatteryManager 维护，provider 不写）——
+    //
+    // 上次「成功读到」本设备的时间戳（QClock::currentMSecsSinceEpoch()）。
+    // BatteryManager 每轮刷新时更新；用于判断缓存是否还在保留窗口内。
+    qint64 lastSeenMsecs = 0;
+    // 当前展示值是否来自缓存（本轮 provider 没返回该设备，沿用上次读数）。
+    // UI 据此把整行标灰并显示「过期」标识。
+    bool stale = false;
 };
 
 // 设备列表（核心层用 std::vector；Qt 边界自行转换为 QList/QVector）。

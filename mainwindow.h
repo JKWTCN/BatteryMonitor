@@ -62,6 +62,8 @@ private slots:
     void onLanguageChanged(int index);
     void onThemeChanged(int index);
     void onStartupToggled(bool checked);
+    // 设置页「缓存保留时长」下拉框被切换。
+    void onStaleRetentionChanged(int index);
     void onTrayActivated();
     void onToggleVisible();
     void onQuit();
@@ -92,6 +94,8 @@ private:
     void loadSettingsIntoUi();
     // 把间隔 msec 反查为 combo index。
     int intervalIndex(int msec) const;
+    // 把粘性缓存保留秒数反查为 combo index。
+    int staleRetentionIndex(int sec) const;
 
     Ui::MainWindow *ui;
     BatteryManager *m_manager;
@@ -140,9 +144,11 @@ private:
     QLabel *m_languageRowTitle = nullptr;
     QLabel *m_themeRowTitle = nullptr;
     QLabel *m_startupRowTitle = nullptr;
+    QLabel *m_staleRetentionRowTitle = nullptr;
     QComboBox *m_intervalCombo = nullptr;
     QComboBox *m_languageCombo = nullptr;
     QComboBox *m_themeCombo = nullptr;
+    QComboBox *m_staleRetentionCombo = nullptr;
     QCheckBox *m_startupCheck = nullptr;
 
     QList<BatteryDevice> m_devices;

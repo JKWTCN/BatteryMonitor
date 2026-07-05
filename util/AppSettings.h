@@ -12,6 +12,8 @@
 //   - RefreshInterval : int 毫秒，默认 10000（10 秒）。
 //   - Language        : QString 语言代码（如 "en"、"zh_CN"），空串表示跟随系统。
 //   - Theme           : QString "system" / "light" / "dark"，默认 "system"。
+//   - StaleRetentionSec : int 秒，默认 180（3 分钟）。设备单轮读不到时，
+//                         沿用上次读数继续展示的保留窗口；0 = 从不缓存。
 //
 // 开机自启单独说明：它直接读写 Windows 注册表的 HKCU\...\Run，
 // 不进 QSettings —— 这样 Windows 任务管理器 / msconfig 里改了的状态
@@ -32,6 +34,12 @@ public:
     // —— 主题："system" / "light" / "dark" ——
     static QString theme();
     static void setTheme(const QString &theme);
+
+    // —— 粘性缓存保留窗口（秒）——
+    // 设备单轮读不到时，沿用上次读数继续展示的保留时长。
+    // 0 = 从不缓存（瞬时失败即移除，等价旧行为）。
+    static int staleRetentionSec();
+    static void setStaleRetentionSec(int sec);
 
     // —— 开机自启 ——
     // 读取当前注册表中是否已配置开机自启。

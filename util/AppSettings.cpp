@@ -14,10 +14,12 @@ namespace
 constexpr auto kKeyRefreshInterval = "RefreshInterval";
 constexpr auto kKeyLanguage = "Language";
 constexpr auto kKeyTheme = "Theme";
+constexpr auto kKeyStaleRetentionSec = "StaleRetentionSec";
 
 constexpr int kDefaultRefreshInterval = 10000;
 const QString kDefaultLanguage = QString();      // 空 = 跟随系统
 const QString kDefaultTheme = QStringLiteral("system");
+constexpr int kDefaultStaleRetentionSec = 180;   // 3 分钟
 } // namespace
 
 int AppSettings::refreshInterval()
@@ -48,6 +50,16 @@ QString AppSettings::theme()
 void AppSettings::setTheme(const QString &theme)
 {
     QSettings().setValue(kKeyTheme, theme);
+}
+
+int AppSettings::staleRetentionSec()
+{
+    return QSettings().value(kKeyStaleRetentionSec, kDefaultStaleRetentionSec).toInt();
+}
+
+void AppSettings::setStaleRetentionSec(int sec)
+{
+    QSettings().setValue(kKeyStaleRetentionSec, sec);
 }
 
 // —— 开机自启 ——

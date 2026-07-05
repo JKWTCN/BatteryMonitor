@@ -3,6 +3,8 @@
 #include "src/providers/bluetooth/AirPodsProvider.h"
 #include "src/providers/bluetooth/BluetoothProvider.h"
 #include "src/providers/bluetooth/ClassicBluetoothProvider.h"
+#include "src/providers/hid/AulaHidProvider.h"
+#include "src/providers/hid/VgnHidProvider.h"
 #include "src/providers/xbox/XboxProvider.h"
 #include "util/AppSettings.h"
 #include "util/Logger.h"
@@ -128,11 +130,17 @@ int main(int argc, char *argv[])
     //                                普通蓝牙耳机走这里。
     //   AirPodsProvider           —— AirPods/Beats（Apple Continuity 广播）。
     //   XboxProvider              —— XInput / RawGameController 手柄。
+    //   AulaHidProvider           —— AULA 等 2.4G 接收器（HID Output/Input Report）。
+    //   VgnHidProvider            —— VGN / 关联品牌 2.4G 接收器键盘 / 鼠标，
+    //                                按协议族分派（ThreeMode / Weisheng / Beiying /
+    //                                VgnRyMouse / Yongjiaxin / VgnLdMs / Arbit / VgnKc2）。
     BatteryManager manager;
     manager.addProvider(std::make_unique<BluetoothProvider>());
     manager.addProvider(std::make_unique<ClassicBluetoothProvider>());
     manager.addProvider(std::make_unique<AirPodsProvider>());
     manager.addProvider(std::make_unique<XboxProvider>());
+    manager.addProvider(std::make_unique<AulaHidProvider>());
+    manager.addProvider(std::make_unique<VgnHidProvider>());
     manager.start();
 
     MainWindow w(&manager);

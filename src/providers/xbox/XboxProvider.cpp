@@ -166,7 +166,7 @@ void readRawGameControllers(std::vector<BatteryDevice> &devices,
         }
         devices.push_back(std::move(device));
         filled.insert(id);
-        LOG_W(L"[Xbox] RawGameController " + name + L" = " +
+        LOG_VERBOSE_W(L"[Xbox] RawGameController " + name + L" = " +
               std::to_wstring(pct) + L"% charging=" + (charging ? L"1" : L"0"));
     }
 }
@@ -234,7 +234,7 @@ void readDevicePropertyBatteries(std::vector<BatteryDevice> &devices,
         device.wired = charging;
         devices.push_back(std::move(device));
         filled.insert(id);
-        LOG_W(L"[Xbox] DeviceProp " + name + L" = " + std::to_wstring(pct) +
+        LOG_VERBOSE_W(L"[Xbox] DeviceProp " + name + L" = " + std::to_wstring(pct) +
               L"% status=\"" + statusStr + L"\"");
     }
 }

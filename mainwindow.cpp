@@ -25,6 +25,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QComboBox>
+#include <QDateTime>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSpinBox>
@@ -110,6 +111,13 @@ QString batteryText(const BatteryDevice &device)
 // 状态列文本。
 QString statusText(const BatteryDevice &device)
 {
+    if (device.stale) {
+        // 计算距上次成功读到该设备过了多少秒；负值 / 0 兜底为 0。
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 ageSec = (now - device.lastSeenMsecs) / 1000;
+        return MainWindow::tr("Stale (last seen %1s ago)")
+            .arg(ageSec > 0 ? ageSec : 0);
+    }
     if (device.wired) {
         return MainWindow::tr("Wired power");
     }
@@ -193,6 +201,19 @@ int intervalFromIndex(int index)
     case 2:  return 30000;
     case 3:  return 60000;
     default: return 10000;
+    }
+}
+
+// 粘性缓存保留下拉框选项 -> 秒。
+// 0 = 从不缓存（瞬时失败即移除，等价改造前行为）。
+int staleRetentionSecFromIndex(int index)
+{
+    switch (index) {
+    case 0:  return 0;     // 从不缓存
+    case 1:  return 60;    // 1 分钟
+    case 2:  return 180;   // 3 分钟（默认）
+    case 3:  return 300;   // 5 分钟
+    default: return 180;
     }
 }
 
@@ -533,17 +554,21 @@ void MainWindow::setupPages()
     m_languageRowTitle = new QLabel(tr("Language"));
     m_themeRowTitle = new QLabel(tr("Theme"));
     m_startupRowTitle = new QLabel(tr("Start with Windows"));
+    m_staleRetentionRowTitle = new QLabel(tr("Stale retention"));
     m_intervalCombo = new QComboBox();
     m_intervalCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_languageCombo = new QComboBox();
     m_languageCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_themeCombo = new QComboBox();
     m_themeCombo->setObjectName(QStringLiteral("settingsCombo"));
+    m_staleRetentionCombo = new QComboBox();
+    m_staleRetentionCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_startupCheck = new QCheckBox();
     m_startupCheck->setObjectName(QStringLiteral("startupCheck"));
     addInfoRow(settingsGroupLayout, m_intervalRowTitle, m_intervalCombo);
     addInfoRow(settingsGroupLayout, m_languageRowTitle, m_languageCombo);
     addInfoRow(settingsGroupLayout, m_themeRowTitle, m_themeCombo);
+    addInfoRow(settingsGroupLayout, m_staleRetentionRowTitle, m_staleRetentionCombo);
     addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
     settingsLayout->addWidget(settingsGroup);
     settingsLayout->addStretch(1);
@@ -646,6 +671,8 @@ void MainWindow::setupConnections()
             this, &MainWindow::onLanguageChanged);
     connect(m_themeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &MainWindow::onThemeChanged);
+    connect(m_staleRetentionCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onStaleRetentionChanged);
     connect(m_startupCheck, &QCheckBox::toggled,
             this, &MainWindow::onStartupToggled);
     connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
@@ -735,6 +762,15 @@ void MainWindow::onStartupToggled(bool checked)
     // 直接读写注册表 HKCU\...\Run。启用后开机时以 --minimized 静默启动。
     // 这里失败（如权限问题）暂不弹错——下一次打开设置页时复选框会反映真实状态。
     AppSettings::setStartupAutoStart(checked);
+}
+
+void MainWindow::onStaleRetentionChanged(int index)
+{
+    const int sec = staleRetentionSecFromIndex(index);
+    AppSettings::setStaleRetentionSec(sec);
+    if (m_manager) {
+        m_manager->setStaleRetention(sec);
+    }
 }
 
 void MainWindow::onTrayActivated()
@@ -918,6 +954,17 @@ int MainWindow::intervalIndex(int msec) const
     }
 }
 
+int MainWindow::staleRetentionIndex(int sec) const
+{
+    switch (sec) {
+    case 0:   return 0;
+    case 60:  return 1;
+    case 180: return 2;
+    case 300: return 3;
+    default:  return 2; // 默认 3 分钟
+    }
+}
+
 void MainWindow::loadSettingsIntoUi()
 {
     // 先填入 combo 的可选项文本（带 tr，便于翻译）。
@@ -927,6 +974,7 @@ void MainWindow::loadSettingsIntoUi()
     const QSignalBlocker b2(m_languageCombo);
     const QSignalBlocker b3(m_themeCombo);
     const QSignalBlocker b4(m_startupCheck);
+    const QSignalBlocker b5(m_staleRetentionCombo);
 
     m_intervalCombo->setCurrentIndex(intervalIndex(AppSettings::refreshInterval()));
 
@@ -942,12 +990,16 @@ void MainWindow::loadSettingsIntoUi()
     else if (theme == QLatin1String("dark")) themeIndex = 2;
     m_themeCombo->setCurrentIndex(themeIndex);
 
+    m_staleRetentionCombo->setCurrentIndex(
+        staleRetentionIndex(AppSettings::staleRetentionSec()));
+
     // 自启状态直接读注册表，与任务管理器显示保持一致。
     m_startupCheck->setChecked(AppSettings::startupAutoStart());
 
-    // 让 manager 同步到持久化的间隔。
+    // 让 manager 同步到持久化的间隔与粘性缓存窗口。
     if (m_manager) {
         m_manager->setInterval(AppSettings::refreshInterval());
+        m_manager->setStaleRetention(AppSettings::staleRetentionSec());
     }
 }
 
@@ -985,6 +1037,17 @@ void MainWindow::retranslateCombos()
         m_themeCombo->setCurrentIndex(cur < 0 ? 0 : cur);
         m_themeCombo->blockSignals(false);
     }
+    if (m_staleRetentionCombo) {
+        m_staleRetentionCombo->blockSignals(true);
+        const int cur = m_staleRetentionCombo->currentIndex();
+        m_staleRetentionCombo->clear();
+        m_staleRetentionCombo->addItem(tr("Never cache"));
+        m_staleRetentionCombo->addItem(tr("1 minute"));
+        m_staleRetentionCombo->addItem(tr("3 minutes"));
+        m_staleRetentionCombo->addItem(tr("5 minutes"));
+        m_staleRetentionCombo->setCurrentIndex(cur < 0 ? 2 : cur);
+        m_staleRetentionCombo->blockSignals(false);
+    }
 }
 
 void MainWindow::retranslateUi()
@@ -998,6 +1061,7 @@ void MainWindow::retranslateUi()
     if (m_languageRowTitle) m_languageRowTitle->setText(tr("Language"));
     if (m_themeRowTitle) m_themeRowTitle->setText(tr("Theme"));
     if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
+    if (m_staleRetentionRowTitle) m_staleRetentionRowTitle->setText(tr("Stale retention"));
     retranslateCombos();
 
     // 托盘菜单 / 图标提示。
@@ -1129,11 +1193,20 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
     for (int row = 0; row < devices.size(); ++row) {
         const auto &device = devices.at(row);
 
+        // stale（缓存沿用）设备整行标灰：电量数保留但视觉降级，提示非实时值。
+        const QColor muted(160, 160, 160);
+
         auto *nameItem = new QTableWidgetItem(QString::fromStdWString(device.name));
+        if (device.stale) {
+            nameItem->setForeground(muted);
+        }
         table->setItem(row, 0, nameItem);
 
         auto *typeItem = new QTableWidgetItem(BatteryManager::typeLabel(device.type));
         typeItem->setTextAlignment(Qt::AlignCenter);
+        if (device.stale) {
+            typeItem->setForeground(muted);
+        }
         table->setItem(row, 1, typeItem);
 
         // 电量列：用进度条单元格直观展示。
@@ -1149,7 +1222,10 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
 
         // 进度条配色（通过 stylesheet 设置 chunk 颜色）。
         const bool dark = QApplication::palette().color(QPalette::Window).lightness() < 128;
-        const QColor color = device.wired ? QColor(142, 142, 147) : levelColor(device.level);
+        // stale 设备把 chunk 也降级为中性灰，进一步区分实时值与缓存值。
+        const QColor color = device.stale
+            ? muted
+            : (device.wired ? QColor(142, 142, 147) : levelColor(device.level));
         const QString trackColor = dark ? QStringLiteral("#3a3a3c") : QStringLiteral("#e5e5ea");
         bar->setStyleSheet(QStringLiteral(
             "QProgressBar { background: %1; border-radius: 6px; }"
@@ -1160,8 +1236,9 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
         auto *overlay = new QLabel(batteryText(device));
         overlay->setAlignment(Qt::AlignCenter);
         const QString overlayColor = dark ? QStringLiteral("#f5f5f7") : QStringLiteral("#1d1d1f");
-        overlay->setStyleSheet(QStringLiteral("color: %1; font-weight: 600;")
-            .arg(overlayColor));
+        overlay->setStyleSheet(QStringLiteral("color: %1; font-weight: %2;")
+            .arg(device.stale ? muted.name() : overlayColor,
+                 device.stale ? QStringLiteral("400") : QStringLiteral("600")));
 
         auto *cell = new QWidget();
         auto *cellLayout = new QVBoxLayout(cell);
@@ -1173,6 +1250,9 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
 
         auto *statusItem = new QTableWidgetItem(statusText(device));
         statusItem->setTextAlignment(Qt::AlignCenter);
+        if (device.stale) {
+            statusItem->setForeground(muted);
+        }
         table->setItem(row, 3, statusItem);
     }
 
@@ -1208,8 +1288,15 @@ void MainWindow::updateTray(const QList<BatteryDevice> &devices)
     QStringList lines;
     lines.reserve(visible.size());
     for (const auto &device : visible) {
-        lines << QStringLiteral("%1: %2")
-                    .arg(QString::fromStdWString(device.name), batteryText(device));
+        // stale 设备在电量后追加「(stale)」标记，让用户一眼区分缓存值。
+        QString suffix;
+        if (device.stale) {
+            suffix = QStringLiteral(" (") + tr("stale") + QStringLiteral(")");
+        }
+        lines << QStringLiteral("%1: %2%3")
+                    .arg(QString::fromStdWString(device.name),
+                         batteryText(device),
+                         suffix);
     }
     m_tray->setToolTip(lines.join(QLatin1Char('\n')));
 }
@@ -1221,6 +1308,11 @@ void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
     // 同时为每台设备读取策略，下面会按策略分流决定是否真的弹通知。
     QSet<QString> currentLow;
     for (const auto &device : devices) {
+        // stale 设备的电量为缓存旧值，不代表实时状态：
+        // 既不应据此新发提醒，也不应据此清理「已提醒」状态。直接跳过。
+        if (device.stale) {
+            continue;
+        }
         const QString id = QString::fromStdWString(device.id);
         if (!DeviceSettings::alertEnabled(id)) {
             continue;
@@ -1253,6 +1345,10 @@ void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
     for (const auto &device : devices) {
         const QString id = QString::fromStdWString(device.id);
         if (!currentLow.contains(id)) {
+            continue;
+        }
+        // stale 设备已在第一步被排除出 currentLow；防御性再判一次。
+        if (device.stale) {
             continue;
         }
         const AlertPolicy policy = DeviceSettings::alertPolicy(id);

@@ -58,6 +58,10 @@ qt_add_executable(BatteryMonitor
     src/providers/bluetooth/AirPodsProvider.h
     src/providers/xbox/XboxProvider.cpp
     src/providers/xbox/XboxProvider.h
+    src/providers/hid/AulaHidProvider.cpp
+    src/providers/hid/AulaHidProvider.h
+    src/providers/hid/VgnHidProvider.cpp
+    src/providers/hid/VgnHidProvider.h
     util/AppSettings.cpp
     util/AppSettings.h
     util/DeviceSettings.cpp
@@ -86,6 +90,18 @@ if(WIN32)
     # setupapi: ClassicBluetoothProvider 的 SetupDi 调用;
     # shell32: SHGetKnownFolderPath (Logger 解析 %APPDATA%)。
     target_link_libraries(BatteryMonitor PRIVATE windowsapp XInput setupapi shell32)
+
+    # —— hidapi（AulaHidProvider 读取 AULA 2.4G 键盘/鼠标电量）——
+    # external/hidapi 内为预编译的 Windows 二进制（hidapi.dll/.lib/.h，v0.15.0）。
+    set(HIDAPI_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/external/hidapi)
+    target_include_directories(BatteryMonitor PRIVATE ${HIDAPI_ROOT})
+    target_link_libraries(BatteryMonitor PRIVATE ${HIDAPI_ROOT}/hidapi.lib)
+    # 运行时需要 hidapi.dll 与 exe 同目录（bin/），编译后自动拷贝。
+    add_custom_command(TARGET BatteryMonitor POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${HIDAPI_ROOT}/hidapi.dll
+                $<TARGET_FILE_DIR:BatteryMonitor>
+        VERBATIM)
 endif()
 
 install(TARGETS BatteryMonitor

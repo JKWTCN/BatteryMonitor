@@ -11,8 +11,6 @@
 
 class QTimer;
 
-namespace detail { class RefreshWorker; }
-
 // 聚合所有 IBatteryProvider，在独立 worker 线程定时轮询，并通过信号把
 // 最新设备列表（按 queued 连接）回送到 UI 线程，保证界面永不卡顿。
 //
@@ -40,6 +38,11 @@ public:
     // 设置轮询间隔（毫秒）。默认 10s。
     void setInterval(int msec);
 
+    // 设置粘性缓存保留窗口（秒）。默认 180（3 分钟）。
+    // 设备单轮读不到时，沿用上次读数继续展示的保留时长；0 = 从不缓存。
+    // 设置后下一轮 refresh 即生效。
+    void setStaleRetention(int sec);
+
     // 请求立即刷新（异步，触发一次 worker 循环）。
     void refreshNow();
 
@@ -51,6 +54,8 @@ signals:
     void devicesUpdated(const QList<BatteryDevice> &devices);
     // 内部信号：把刷新请求从主线程投递到 worker 线程（queued 连接）。
     void requestRefresh();
+    // 内部信号：把粘性缓存窗口（秒）变更投递到 worker 线程（queued 连接）。
+    void requestStaleRetention(int sec);
 
 private slots:
     // 由内部 QTimer 触发：请求 worker 刷新。

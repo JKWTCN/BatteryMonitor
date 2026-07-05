@@ -192,7 +192,7 @@ std::map<std::wstring, int, std::less<>> readBthenumBattery(
         if (!looksLikeBtAudio(devName)) {
             continue;
         }
-        LOG_W(L"[ClassicBT] BTHENUM node: \"" + devName + L"\"");
+        LOG_VERBOSE_W(L"[ClassicBT] BTHENUM node: \"" + devName + L"\"");
         // 在已连接集合里找匹配。
         std::wstring matchedName;
         for (const auto &[connName, id] : connected) {
@@ -203,7 +203,7 @@ std::map<std::wstring, int, std::less<>> readBthenumBattery(
             }
         }
         if (matchedName.empty()) {
-            LOG_W(L"[ClassicBT]   no connected match, skip");
+            LOG_VERBOSE_W(L"[ClassicBT]   no connected match, skip");
             continue;
         }
         // 读电量。电量百分比 0-100 可能以 DEVPROP_TYPE_BYTE / INT16 / UINT16 /
@@ -221,22 +221,22 @@ std::map<std::wstring, int, std::less<>> readBthenumBattery(
             propType == DEVPROP_TYPE_UINT32;
         if (!ok) {
             // API 调用失败（属性不存在返回 CR_NO_SUCH_VALUE -> err=1168 等）。
-            LOG_W(L"[ClassicBT]   battery query failed: win32=" +
+            LOG_VERBOSE_W(L"[ClassicBT]   battery query failed: win32=" +
                   std::to_wstring(GetLastError()));
         } else if (!numericType) {
             // 调用成功但类型不是数值（如 STRING / EMPTY），此节点无电量属性。
-            LOG_W(L"[ClassicBT]   battery property unavailable: type=" +
+            LOG_VERBOSE_W(L"[ClassicBT]   battery property unavailable: type=" +
                   std::to_wstring(propType));
         } else {
             const int pct = *reinterpret_cast<const int *>(buf);
             if (pct >= 0 && pct <= 100) {
-                LOG_W(L"[ClassicBT]   battery read OK: " + std::to_wstring(pct) + L"%");
+                LOG_VERBOSE_W(L"[ClassicBT]   battery read OK: " + std::to_wstring(pct) + L"%");
                 // 同名取一份（按 canonical key 合并）。
                 if (!batteryByName.count(matchedName) || pct > batteryByName[matchedName]) {
                     batteryByName[matchedName] = pct;
                 }
             } else {
-                LOG_W(L"[ClassicBT]   battery out of range: " + std::to_wstring(pct));
+                LOG_VERBOSE_W(L"[ClassicBT]   battery out of range: " + std::to_wstring(pct));
             }
         }
     }
@@ -260,10 +260,10 @@ std::vector<BatteryDevice> ClassicBluetoothProvider::readDevices()
 
     // 第 1 步：哪些经典蓝牙设备当前在线。
     const auto connected = collectConnectedClassicDevices();
-    LOG_W(L"[ClassicBT] connected classic devices = " +
+    LOG_VERBOSE_W(L"[ClassicBT] connected classic devices = " +
           std::to_wstring(connected.size()));
     for (const auto &[name, id] : connected) {
-        LOG_W(L"[ClassicBT]   connected: " + name + L" -> " + id);
+        LOG_VERBOSE_W(L"[ClassicBT]   connected: " + name + L" -> " + id);
     }
 
     // 第 2 步：从 BTHENUM 设备节点读电量。
@@ -289,7 +289,7 @@ std::vector<BatteryDevice> ClassicBluetoothProvider::readDevices()
         device.level = levelFromPercentage(pct);
         device.connected = true;
         devices.push_back(std::move(device));
-        LOG_W(L"[ClassicBT] device: " + name + L" = " + std::to_wstring(pct) +
+        LOG_VERBOSE_W(L"[ClassicBT] device: " + name + L" = " + std::to_wstring(pct) +
               L"% (" + id + L")");
     }
     return devices;

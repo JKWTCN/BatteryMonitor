@@ -27,6 +27,7 @@ struct WriteLockGuard
 const wchar_t *levelTag(Logger::Level level)
 {
     switch (level) {
+    case Logger::Level::Verbose: return L"VRB  ";
     case Logger::Level::Info:    return L"INFO ";
     case Logger::Level::Warning: return L"WARN ";
     case Logger::Level::Error:   return L"ERROR";
@@ -159,6 +160,8 @@ std::wstring Logger::resolveFilePath()
 
 void Logger::rotateIfNeeded()
 {
+    // 必须在打开 ofstream 之前调用：std::ofstream 默认不共享 GENERIC_WRITE，
+    // 这里再以 TRUNCATE_EXISTING 打开会因共享冲突而失败（旧实现的 bug，文件会无限膨胀）。
     if (fileSize(m_filePath) > m_maxBytes) {
         // 超过上限：直接清空（简单覆盖式轮转，保留最近内容）。
         HANDLE h = CreateFileW(m_filePath.c_str(), GENERIC_WRITE, FILE_SHARE_READ,
@@ -171,12 +174,14 @@ void Logger::rotateIfNeeded()
 
 void Logger::writeLine(const std::string &utf8Line)
 {
+    // 先轮转再打开写文件：TRUNCATE 与 ofstream 的默认共享模式互斥，
+    // 顺序颠倒会让清空操作静默失败（文件突破 maxBytes 上限）。
+    rotateIfNeeded();
     // 用二进制追加模式打开，避免文本模式做 CRLF 转换（行尾已含 \n）。
     std::ofstream file(m_filePath, std::ios::app | std::ios::binary);
     if (!file.is_open()) {
         return; // 打不开静默丢弃，日志绝不能让程序崩。
     }
-    rotateIfNeeded();
     file << utf8Line;
 }
 
