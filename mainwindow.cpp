@@ -854,8 +854,13 @@ void MainWindow::onThemeChanged(int index)
 void MainWindow::onStartupToggled(bool checked)
 {
     // 直接读写注册表 HKCU\...\Run。启用后开机时以 --minimized 静默启动。
-    // 这里失败（如权限问题）暂不弹错——下一次打开设置页时复选框会反映真实状态。
-    AppSettings::setStartupAutoStart(checked);
+    if (!AppSettings::setStartupAutoStart(checked)) {
+        const QSignalBlocker blocker(m_startupCheck);
+        m_startupCheck->setChecked(AppSettings::startupAutoStart());
+        QMessageBox::warning(this,
+                             tr("Battery Monitor"),
+                             tr("Failed to update the Windows startup setting."));
+    }
 }
 
 void MainWindow::onStaleRetentionChanged(int index)

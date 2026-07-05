@@ -16,8 +16,8 @@
 //                         沿用上次读数继续展示的保留窗口；0 = 从不缓存。
 //
 // 开机自启单独说明：它直接读写 Windows 注册表的 HKCU\...\Run，
-// 不进 QSettings —— 这样 Windows 任务管理器 / msconfig 里改了的状态
-// 也能被 startupAutoStart() 正确读到（单一数据源）。
+// 不进 QSettings。读取时也会兼容 Windows 任务管理器写入的
+// Explorer\StartupApproved\Run 禁用状态。
 //
 // 全部为静态方法，任意线程调用均可（QSettings 自身线程安全）。
 class AppSettings
@@ -46,7 +46,7 @@ public:
     static bool startupAutoStart();
     // 启用/禁用开机自启。启用后会在命令行追加 "--minimized"，
     // 这样开机时程序直接进入托盘，不弹窗口。
-    static void setStartupAutoStart(bool enabled);
+    static bool setStartupAutoStart(bool enabled);
 
 private:
     AppSettings() = delete;

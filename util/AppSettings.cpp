@@ -76,6 +76,8 @@ namespace
 // 用 Qt 自身路径相关宏确保 Win64 / Win32 一致。
 constexpr auto kRunKeyPath =
     R"(Software\Microsoft\Windows\CurrentVersion\Run)";
+constexpr auto kStartupApprovedRunKeyPath =
+    R"(Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run)";
 
 // 构造写到注册表的命令行："<exe 路径>" --minimized
 // exe 路径含空格时必须用双引号包起来，否则 explorer 解析会失败。
@@ -84,20 +86,63 @@ QString autoStartCommand()
     const QString exe = QCoreApplication::applicationFilePath();
     return QStringLiteral("\"%1\" --minimized").arg(exe);
 }
+
+bool isStartupApprovedDisabled(const QString &valueName)
+{
+    HKEY key = nullptr;
+    const QString keyPath = QString::fromUtf8(kStartupApprovedRunKeyPath);
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      reinterpret_cast<LPCWSTR>(keyPath.utf16()),
+                      0, KEY_READ, &key) != ERROR_SUCCESS) {
+        return false;
+    }
+
+    BYTE buffer[16] = {0};
+    DWORD bufferSize = sizeof(buffer);
+    DWORD type = 0;
+    const LSTATUS status = RegQueryValueExW(
+        key,
+        reinterpret_cast<LPCWSTR>(valueName.utf16()),
+        nullptr, &type,
+        buffer, &bufferSize);
+    RegCloseKey(key);
+
+    // Windows 任务管理器会在 StartupApproved\Run 中记录启停状态；
+    // 常见格式下首字节 0x03 表示禁用，0x02 表示启用。
+    return status == ERROR_SUCCESS
+        && type == REG_BINARY
+        && bufferSize > 0
+        && buffer[0] == 0x03;
+}
+
+void clearStartupApprovedState(const QString &valueName)
+{
+    HKEY key = nullptr;
+    const QString keyPath = QString::fromUtf8(kStartupApprovedRunKeyPath);
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                      reinterpret_cast<LPCWSTR>(keyPath.utf16()),
+                      0, KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
+        return;
+    }
+    RegDeleteValueW(key, reinterpret_cast<LPCWSTR>(valueName.utf16()));
+    RegCloseKey(key);
+}
 } // namespace
 #endif
 
 bool AppSettings::startupAutoStart()
 {
 #ifdef Q_OS_WIN
+    const QString valueName = QCoreApplication::applicationName();
+
     HKEY key = nullptr;
+    const QString keyPath = QString::fromUtf8(kRunKeyPath);
     if (RegOpenKeyExW(HKEY_CURRENT_USER,
-                      reinterpret_cast<LPCWSTR>(QString::fromUtf8(kRunKeyPath).utf16()),
+                      reinterpret_cast<LPCWSTR>(keyPath.utf16()),
                       0, KEY_READ, &key) != ERROR_SUCCESS) {
         return false;
     }
 
-    const QString valueName = QCoreApplication::applicationName();
     WCHAR buffer[MAX_PATH * 2] = {0};
     DWORD bufferSize = sizeof(buffer);
     DWORD type = 0;
@@ -111,6 +156,9 @@ bool AppSettings::startupAutoStart()
     if (status != ERROR_SUCCESS || type != REG_SZ) {
         return false;
     }
+    if (isStartupApprovedDisabled(valueName)) {
+        return false;
+    }
     // 只要键存在且非空就视为启用（不严格匹配命令行内容，
     // 这样用户从外部改过路径/参数也能正确显示为“已启用”）。
     return bufferSize > sizeof(WCHAR); // 至少有一个非结束符的字符
@@ -119,33 +167,44 @@ bool AppSettings::startupAutoStart()
 #endif
 }
 
-void AppSettings::setStartupAutoStart(bool enabled)
+bool AppSettings::setStartupAutoStart(bool enabled)
 {
 #ifdef Q_OS_WIN
     HKEY key = nullptr;
+    const QString keyPath = QString::fromUtf8(kRunKeyPath);
     const LSTATUS openStatus = RegCreateKeyExW(
         HKEY_CURRENT_USER,
-        reinterpret_cast<LPCWSTR>(QString::fromUtf8(kRunKeyPath).utf16()),
+        reinterpret_cast<LPCWSTR>(keyPath.utf16()),
         0, nullptr, 0, KEY_WRITE, nullptr, &key, nullptr);
     if (openStatus != ERROR_SUCCESS) {
-        return;
+        return false;
     }
 
     const QString valueName = QCoreApplication::applicationName();
+    LSTATUS status = ERROR_SUCCESS;
     if (enabled) {
         const QString cmd = autoStartCommand();
         const auto cmdUtf16 = cmd.utf16();
-        const DWORD byteLen = static_cast<DWORD>(cmd.size() * sizeof(WCHAR));
-        RegSetValueExW(key,
-                       reinterpret_cast<LPCWSTR>(valueName.utf16()),
-                       0, REG_SZ,
-                       reinterpret_cast<const BYTE*>(cmdUtf16),
-                       byteLen);
+        const DWORD byteLen = static_cast<DWORD>((cmd.size() + 1) * sizeof(WCHAR));
+        status = RegSetValueExW(key,
+                                reinterpret_cast<LPCWSTR>(valueName.utf16()),
+                                0, REG_SZ,
+                                reinterpret_cast<const BYTE*>(cmdUtf16),
+                                byteLen);
     } else {
-        RegDeleteValueW(key, reinterpret_cast<LPCWSTR>(valueName.utf16()));
+        status = RegDeleteValueW(key, reinterpret_cast<LPCWSTR>(valueName.utf16()));
+        if (status == ERROR_FILE_NOT_FOUND) {
+            status = ERROR_SUCCESS;
+        }
     }
     RegCloseKey(key);
+    if (status != ERROR_SUCCESS) {
+        return false;
+    }
+    clearStartupApprovedState(valueName);
+    return true;
 #else
     Q_UNUSED(enabled)
+    return false;
 #endif
 }
