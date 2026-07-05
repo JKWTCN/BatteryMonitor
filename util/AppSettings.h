@@ -13,6 +13,10 @@
 //   - Language        : QString 语言代码（如 "en"、"zh_CN"），空串表示跟随系统。
 //   - Theme           : QString "system" / "light" / "dark"，默认 "system"。
 //
+// 开机自启单独说明：它直接读写 Windows 注册表的 HKCU\...\Run，
+// 不进 QSettings —— 这样 Windows 任务管理器 / msconfig 里改了的状态
+// 也能被 startupAutoStart() 正确读到（单一数据源）。
+//
 // 全部为静态方法，任意线程调用均可（QSettings 自身线程安全）。
 class AppSettings
 {
@@ -28,6 +32,13 @@ public:
     // —— 主题："system" / "light" / "dark" ——
     static QString theme();
     static void setTheme(const QString &theme);
+
+    // —— 开机自启 ——
+    // 读取当前注册表中是否已配置开机自启。
+    static bool startupAutoStart();
+    // 启用/禁用开机自启。启用后会在命令行追加 "--minimized"，
+    // 这样开机时程序直接进入托盘，不弹窗口。
+    static void setStartupAutoStart(bool enabled);
 
 private:
     AppSettings() = delete;

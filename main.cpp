@@ -134,9 +134,19 @@ int main(int argc, char *argv[])
     manager.start();
 
     MainWindow w(&manager);
-    w.showNormal();
-    w.raise();
-    w.activateWindow();
+    // --minimized：开机自启时由注册表命令行追加，让程序静默进入托盘，
+    // 不弹主窗口。普通双击启动不带这个参数，正常显示窗口。
+    const bool startMinimized = QCoreApplication::arguments()
+        .contains(QStringLiteral("--minimized"), Qt::CaseInsensitive);
+    if (startMinimized) {
+        // 不调用 show*()，窗口保持隐藏；托盘图标已由 MainWindow 构造时建立。
+        // 首次自启也提示一下用户程序在托盘里（避免“装了找不到”的困惑）。
+        w.showTrayHintOnce();
+    } else {
+        w.showNormal();
+        w.raise();
+        w.activateWindow();
+    }
 
     // 设置页语言/主题切换 -> 立即生效。
     //   languageChanged: 重新 load + install translator，再回调界面重译。

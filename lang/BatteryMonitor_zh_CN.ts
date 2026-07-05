@@ -264,5 +264,9 @@
         <comment>alert policy</comment>
         <translation>每 60 分钟</translation>
     </message>
+    <message>
+        <source>Start with Windows</source>
+        <translation>开机自启</translation>
+    </message>
 </context>
 </TS>

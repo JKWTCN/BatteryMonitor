@@ -40,6 +40,10 @@ public:
     // 语言切换后由外部（main.cpp 的翻译控制器）调用，重填所有静态控件文本。
     void retranslateUi();
 
+    // 弹一次“程序在托盘里运行”的托盘通知。幂等：整个进程生命周期最多弹一次。
+    // 由 main.cpp（--minimized 自启）和 closeEvent（首次最小化）共用。
+    void showTrayHintOnce();
+
 signals:
     // 用户在设置页修改语言 / 主题时发出，由 main.cpp 中的全局控制器接收，
     // 实际的 translator / palette 切换在那里完成，再回调用 retranslateUi()。
@@ -57,6 +61,7 @@ private slots:
     void onIntervalChanged(int index);
     void onLanguageChanged(int index);
     void onThemeChanged(int index);
+    void onStartupToggled(bool checked);
     void onTrayActivated();
     void onToggleVisible();
     void onQuit();
@@ -134,9 +139,11 @@ private:
     QLabel *m_intervalRowTitle = nullptr;
     QLabel *m_languageRowTitle = nullptr;
     QLabel *m_themeRowTitle = nullptr;
+    QLabel *m_startupRowTitle = nullptr;
     QComboBox *m_intervalCombo = nullptr;
     QComboBox *m_languageCombo = nullptr;
     QComboBox *m_themeCombo = nullptr;
+    QCheckBox *m_startupCheck = nullptr;
 
     QList<BatteryDevice> m_devices;
     QString m_currentDetailId;

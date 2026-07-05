@@ -532,15 +532,19 @@ void MainWindow::setupPages()
     m_intervalRowTitle = new QLabel(tr("Refresh interval"));
     m_languageRowTitle = new QLabel(tr("Language"));
     m_themeRowTitle = new QLabel(tr("Theme"));
+    m_startupRowTitle = new QLabel(tr("Start with Windows"));
     m_intervalCombo = new QComboBox();
     m_intervalCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_languageCombo = new QComboBox();
     m_languageCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_themeCombo = new QComboBox();
     m_themeCombo->setObjectName(QStringLiteral("settingsCombo"));
+    m_startupCheck = new QCheckBox();
+    m_startupCheck->setObjectName(QStringLiteral("startupCheck"));
     addInfoRow(settingsGroupLayout, m_intervalRowTitle, m_intervalCombo);
     addInfoRow(settingsGroupLayout, m_languageRowTitle, m_languageCombo);
     addInfoRow(settingsGroupLayout, m_themeRowTitle, m_themeCombo);
+    addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
     settingsLayout->addWidget(settingsGroup);
     settingsLayout->addStretch(1);
 
@@ -642,6 +646,8 @@ void MainWindow::setupConnections()
             this, &MainWindow::onLanguageChanged);
     connect(m_themeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &MainWindow::onThemeChanged);
+    connect(m_startupCheck, &QCheckBox::toggled,
+            this, &MainWindow::onStartupToggled);
     connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
             this, &MainWindow::showDeviceDetail);
 
@@ -722,6 +728,13 @@ void MainWindow::onThemeChanged(int index)
     AppSettings::setTheme(theme);
     // 实际 palette 应用由 main.cpp 中的全局 applyApplicationTheme() 完成。
     emit themeChanged(theme);
+}
+
+void MainWindow::onStartupToggled(bool checked)
+{
+    // 直接读写注册表 HKCU\...\Run。启用后开机时以 --minimized 静默启动。
+    // 这里失败（如权限问题）暂不弹错——下一次打开设置页时复选框会反映真实状态。
+    AppSettings::setStartupAutoStart(checked);
 }
 
 void MainWindow::onTrayActivated()
@@ -820,18 +833,26 @@ void MainWindow::onDeviceAlertPolicyChanged(int index)
     notifyLowBattery(m_devices);
 }
 
+void MainWindow::showTrayHintOnce()
+{
+    if (m_trayHintShown) {
+        return;
+    }
+    m_trayHintShown = true;
+    if (m_tray) {
+        m_tray->showMessage(
+            tr("Battery Monitor"),
+            tr("The application will keep running in the system tray. "
+               "Use the tray menu to quit."),
+            QSystemTrayIcon::Information, 3000);
+    }
+}
+
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     // 关闭窗口 -> 最小化到托盘（不退出）。仅“退出”菜单真正退出。
     if (m_tray && m_tray->isVisible()) {
-        if (!m_trayHintShown) {
-            m_trayHintShown = true;
-            m_tray->showMessage(
-                tr("Battery Monitor"),
-                tr("The application will keep running in the system tray. "
-                   "Use the tray menu to quit."),
-                QSystemTrayIcon::Information, 3000);
-        }
+        showTrayHintOnce();
         hide();
         event->ignore();
         return;
@@ -905,6 +926,7 @@ void MainWindow::loadSettingsIntoUi()
     const QSignalBlocker b1(m_intervalCombo);
     const QSignalBlocker b2(m_languageCombo);
     const QSignalBlocker b3(m_themeCombo);
+    const QSignalBlocker b4(m_startupCheck);
 
     m_intervalCombo->setCurrentIndex(intervalIndex(AppSettings::refreshInterval()));
 
@@ -919,6 +941,9 @@ void MainWindow::loadSettingsIntoUi()
     if (theme == QLatin1String("light")) themeIndex = 1;
     else if (theme == QLatin1String("dark")) themeIndex = 2;
     m_themeCombo->setCurrentIndex(themeIndex);
+
+    // 自启状态直接读注册表，与任务管理器显示保持一致。
+    m_startupCheck->setChecked(AppSettings::startupAutoStart());
 
     // 让 manager 同步到持久化的间隔。
     if (m_manager) {
@@ -972,6 +997,7 @@ void MainWindow::retranslateUi()
     if (m_intervalRowTitle) m_intervalRowTitle->setText(tr("Refresh interval"));
     if (m_languageRowTitle) m_languageRowTitle->setText(tr("Language"));
     if (m_themeRowTitle) m_themeRowTitle->setText(tr("Theme"));
+    if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
     retranslateCombos();
 
     // 托盘菜单 / 图标提示。
