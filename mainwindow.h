@@ -1,7 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "battery/BatteryDevice.h"
+#include "src/core/BatteryDevice.h"
 
 #include <QDateTime>
 #include <QHash>

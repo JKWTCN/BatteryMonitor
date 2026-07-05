@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IBatteryProvider.h"
+#include "src/core/IBatteryProvider.h"
 
 #include <winrt/Windows.Devices.Bluetooth.Advertisement.h>
 #include <winrt/base.h>

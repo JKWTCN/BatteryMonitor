@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IBatteryProvider.h"
+#include "src/core/IBatteryProvider.h"
 
 #include <set>
 #include <string>

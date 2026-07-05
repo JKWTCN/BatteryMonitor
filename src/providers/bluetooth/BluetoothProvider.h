@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IBatteryProvider.h"
+#include "src/core/IBatteryProvider.h"
 
 // 蓝牙电量提供者：通过 WinRT 多路径读取蓝牙设备电量。
 //

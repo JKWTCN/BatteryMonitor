@@ -1,9 +1,9 @@
 #include "mainwindow.h"
-#include "battery/AirPodsProvider.h"
-#include "battery/BatteryManager.h"
-#include "battery/BluetoothProvider.h"
-#include "battery/ClassicBluetoothProvider.h"
-#include "battery/XboxProvider.h"
+#include "src/core/BatteryManager.h"
+#include "src/providers/bluetooth/AirPodsProvider.h"
+#include "src/providers/bluetooth/BluetoothProvider.h"
+#include "src/providers/bluetooth/ClassicBluetoothProvider.h"
+#include "src/providers/xbox/XboxProvider.h"
 #include "util/AppSettings.h"
 #include "util/Logger.h"
 
@@ -120,12 +120,14 @@ int main(int argc, char *argv[])
     // 启动时按已保存的主题应用 application palette。
     applyApplicationTheme(AppSettings::theme());
 
-    // 聚合所有电量提供者；未来适配 USB HID 时在此追加一个 addProvider 即可。
-    //   BluetoothProvider      —— BLE GATT Battery Service（BLE 耳机/手环）。
-    //   ClassicBluetoothProvider —— 经典蓝牙 A2DP/HFP 耳机（SetupAPI BTHENUM），
-    //                              普通蓝牙耳机走这里。
-    //   AirPodsProvider        —— AirPods/Beats（Apple Continuity 广播）。
-    //   XboxProvider           —— XInput / RawGameController 手柄。
+    // 聚合所有电量提供者；新增传输方式（如 USB 2.4G 接收器）时，
+    // 只需在 src/providers/<传输方式>/ 下实现一个 IBatteryProvider，
+    // 然后在此追加一行 addProvider，UI / 轮询 / 托盘逻辑无需改动。
+    //   BluetoothProvider         —— BLE GATT Battery Service（BLE 耳机/手环）。
+    //   ClassicBluetoothProvider  —— 经典蓝牙 A2DP/HFP 耳机（SetupAPI BTHENUM），
+    //                                普通蓝牙耳机走这里。
+    //   AirPodsProvider           —— AirPods/Beats（Apple Continuity 广播）。
+    //   XboxProvider              —— XInput / RawGameController 手柄。
     BatteryManager manager;
     manager.addProvider(std::make_unique<BluetoothProvider>());
     manager.addProvider(std::make_unique<ClassicBluetoothProvider>());

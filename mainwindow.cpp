@@ -1,7 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include "battery/BatteryManager.h"
+#include "src/core/BatteryManager.h"
 #include "util/AppSettings.h"
 #include "util/DeviceSettings.h"
 

@@ -44,18 +44,20 @@ qt_add_executable(BatteryMonitor
     mainwindow.cpp
     mainwindow.h
     mainwindow.ui
-    battery/BatteryDevice.h
-    battery/IBatteryProvider.h
-    battery/BatteryManager.cpp
-    battery/BatteryManager.h
-    battery/AirPodsProvider.cpp
-    battery/AirPodsProvider.h
-    battery/BluetoothProvider.cpp
-    battery/BluetoothProvider.h
-    battery/ClassicBluetoothProvider.cpp
-    battery/ClassicBluetoothProvider.h
-    battery/XboxProvider.cpp
-    battery/XboxProvider.h
+    # 核心抽象层（BatteryDevice / IBatteryProvider / BatteryManager）。
+    src/core/BatteryDevice.h
+    src/core/IBatteryProvider.h
+    src/core/BatteryManager.cpp
+    src/core/BatteryManager.h
+    # 具体 Provider 实现：按传输方式分目录，新增传输方式在此追加。
+    src/providers/bluetooth/BluetoothProvider.cpp
+    src/providers/bluetooth/BluetoothProvider.h
+    src/providers/bluetooth/ClassicBluetoothProvider.cpp
+    src/providers/bluetooth/ClassicBluetoothProvider.h
+    src/providers/bluetooth/AirPodsProvider.cpp
+    src/providers/bluetooth/AirPodsProvider.h
+    src/providers/xbox/XboxProvider.cpp
+    src/providers/xbox/XboxProvider.h
     util/AppSettings.cpp
     util/AppSettings.h
     util/DeviceSettings.cpp

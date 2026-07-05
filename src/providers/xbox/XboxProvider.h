@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IBatteryProvider.h"
+#include "src/core/IBatteryProvider.h"
 
 // Xbox 手柄电量提供者：多路径读取手柄电量。
 //
