@@ -26,6 +26,7 @@ class QFrame;
 class QLabel;
 class QLineEdit;
 class QPushButton;
+class QScrollArea;
 class QSpinBox;
 class QStackedWidget;
 class QWidget;
@@ -111,7 +112,10 @@ private:
 
     QStackedWidget *m_stack = nullptr;
     QWidget *m_listPage = nullptr;
+    QLabel *m_listHintLabel = nullptr;
+    QScrollArea *m_detailScrollArea = nullptr;
     QWidget *m_detailPage = nullptr;
+    QScrollArea *m_settingsScrollArea = nullptr;
     QWidget *m_settingsPage = nullptr;
     QLabel *m_detailNameLabel = nullptr;
     QLabel *m_detailStatusLabel = nullptr;

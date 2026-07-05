@@ -27,10 +27,13 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QDateTime>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QSystemTrayIcon>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -128,8 +131,34 @@ QString statusText(const BatteryDevice &device)
     return MainWindow::tr("Connected");
 }
 
-// 程序化绘制电池形托盘 / 窗口图标，按最低档位设备着色，无需外部资源。
-QIcon drawBatteryIcon(BatteryLevel level, int size)
+struct BatteryIconState
+{
+    BatteryLevel level = BatteryLevel::Unknown;
+    int percent = 0;
+};
+
+int clampPercent(int value)
+{
+    if (value < 0) {
+        return 0;
+    }
+    if (value > 100) {
+        return 100;
+    }
+    return value;
+}
+
+int iconPercentForDevice(const BatteryDevice &device)
+{
+    if (device.percentage >= 0) {
+        return clampPercent(device.percentage);
+    }
+    return levelRepresentativePercent(device.level);
+}
+
+// 程序化绘制电池形托盘 / 窗口图标，无需外部资源。
+// 颜色按最低设备档位走，填充高度按真实百分比走；无精确百分比的设备才使用档位代表值。
+QIcon drawBatteryIcon(BatteryLevel level, int percent, int size)
 {
     QPixmap pixmap(size, size);
     pixmap.fill(Qt::transparent);
@@ -161,7 +190,7 @@ QIcon drawBatteryIcon(BatteryLevel level, int size)
     painter.drawRoundedRect(bodyRect, 4, 4);
 
     // 电量填充。
-    int fillPercent = levelRepresentativePercent(level);
+    const int fillPercent = clampPercent(percent);
     if (fillPercent > 0) {
         QRectF fillRect = bodyRect.adjusted(
             bodyRect.width() * 0.12,
@@ -178,16 +207,29 @@ QIcon drawBatteryIcon(BatteryLevel level, int size)
     return QIcon(pixmap);
 }
 
-// 找到列表中电量最低的设备档位，用于托盘图标着色。
-BatteryLevel lowestLevel(const QList<BatteryDevice> &devices)
+QIcon drawBatteryIcon(BatteryLevel level, int size)
 {
-    BatteryLevel lowest = BatteryLevel::Unknown;
+    return drawBatteryIcon(level, levelRepresentativePercent(level), size);
+}
+
+// 找到列表中电量最低的设备，用于托盘 / 窗口图标。
+BatteryIconState lowestIconState(const QList<BatteryDevice> &devices)
+{
+    BatteryIconState lowest;
+    bool hasKnownBattery = false;
     for (const auto &device : devices) {
         if (device.wired) {
             continue;
         }
-        if (device.level < lowest || lowest == BatteryLevel::Unknown) {
-            lowest = device.level;
+        if (device.percentage < 0 && device.level == BatteryLevel::Unknown) {
+            continue;
+        }
+
+        const int percent = iconPercentForDevice(device);
+        if (!hasKnownBattery || percent < lowest.percent) {
+            lowest.level = device.level;
+            lowest.percent = percent;
+            hasKnownBattery = true;
         }
     }
     return lowest;
@@ -280,6 +322,8 @@ QLabel *makeValueLabel(const QString &text = QString())
     label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     label->setWordWrap(true);
     label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    label->setMinimumWidth(180);
+    label->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     return label;
 }
 
@@ -292,11 +336,11 @@ void addInfoRow(QVBoxLayout *layout, QLabel *titleLabel, QWidget *valueWidget)
     auto *row = new QWidget();
     row->setObjectName(QStringLiteral("infoRow"));
     auto *rowLayout = new QHBoxLayout(row);
-    rowLayout->setContentsMargins(16, 10, 16, 10);
-    rowLayout->setSpacing(18);
+    rowLayout->setContentsMargins(18, 11, 18, 11);
+    rowLayout->setSpacing(20);
 
     titleLabel->setObjectName(QStringLiteral("rowTitle"));
-    titleLabel->setMinimumWidth(120);
+    titleLabel->setMinimumWidth(136);
     titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
     valueWidget->setObjectName(QStringLiteral("rowValue"));
@@ -318,7 +362,7 @@ QFrame *makeInfoGroup()
     auto *group = new QFrame();
     group->setObjectName(QStringLiteral("detailGroup"));
     auto *layout = new QVBoxLayout(group);
-    layout->setContentsMargins(0, 4, 0, 4);
+    layout->setContentsMargins(0, 6, 0, 6);
     layout->setSpacing(0);
     return group;
 }
@@ -331,7 +375,8 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
 {
     ui->setupUi(this);
     setupPages();
-    setMinimumSize(560, 380);
+    setMinimumSize(600, 420);
+    resize(760, 560);
 
     // 表格基础外观。
     ui->deviceTable->setColumnCount(4);
@@ -343,6 +388,8 @@ MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
     ui->deviceTable->verticalHeader()->setDefaultSectionSize(56);
     ui->deviceTable->setShowGrid(false);
     ui->deviceTable->setAlternatingRowColors(false);
+    ui->deviceTable->setMouseTracking(true);
+    ui->deviceTable->setWordWrap(false);
     ui->deviceTable->setRowCount(1);
     ui->deviceTable->setItem(0, 0, new QTableWidgetItem(tr("No devices detected")));
 
@@ -405,27 +452,44 @@ void MainWindow::setupPages()
     auto *controlLayout = new QHBoxLayout(controlBar);
     controlLayout->setContentsMargins(2, 0, 2, 0);
     controlLayout->setSpacing(10);
+
+    m_listHintLabel = new QLabel(tr("Double-click a device to edit device settings."));
+    m_listHintLabel->setObjectName(QStringLiteral("listHint"));
+    m_listHintLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    m_listHintLabel->setWordWrap(true);
+    m_listHintLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    controlLayout->addWidget(m_listHintLabel, 1);
     controlLayout->addStretch(1);
     m_refreshButton = new QPushButton(tr("Refresh"));
     m_refreshButton->setObjectName(QStringLiteral("refreshButton"));
+    m_refreshButton->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
     m_refreshButton->setCursor(Qt::PointingHandCursor);
     m_settingsButton = new QPushButton(tr("Settings"));
     m_settingsButton->setObjectName(QStringLiteral("settingsButton"));
+    m_settingsButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
     m_settingsButton->setCursor(Qt::PointingHandCursor);
     controlLayout->addWidget(m_refreshButton);
     controlLayout->addWidget(m_settingsButton);
     listLayout->addWidget(controlBar);
     m_stack->addWidget(m_listPage);
 
-    m_detailPage = new QWidget(m_stack);
+    m_detailScrollArea = new QScrollArea(m_stack);
+    m_detailScrollArea->setObjectName(QStringLiteral("pageScrollArea"));
+    m_detailScrollArea->setWidgetResizable(true);
+    m_detailScrollArea->setFrameShape(QFrame::NoFrame);
+    m_detailScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    m_detailPage = new QWidget();
+    m_detailPage->setObjectName(QStringLiteral("scrollPage"));
     auto *detailLayout = new QVBoxLayout(m_detailPage);
-    detailLayout->setContentsMargins(0, 0, 0, 0);
-    detailLayout->setSpacing(14);
+    detailLayout->setContentsMargins(2, 0, 8, 2);
+    detailLayout->setSpacing(12);
 
     auto *navLayout = new QHBoxLayout();
     navLayout->setContentsMargins(0, 0, 0, 0);
     auto *backButton = new QPushButton(tr("Back"));
     backButton->setObjectName(QStringLiteral("backButton"));
+    backButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
     backButton->setCursor(Qt::PointingHandCursor);
     navLayout->addWidget(backButton);
     navLayout->addStretch(1);
@@ -531,18 +595,27 @@ void MainWindow::setupPages()
     detailLayout->addWidget(m_deviceSettingsGroup);
     detailLayout->addStretch(1);
 
-    m_stack->addWidget(m_detailPage);
+    m_detailScrollArea->setWidget(m_detailPage);
+    m_stack->addWidget(m_detailScrollArea);
 
     // —— 设置页（堆栈第三页）——
-    m_settingsPage = new QWidget(m_stack);
+    m_settingsScrollArea = new QScrollArea(m_stack);
+    m_settingsScrollArea->setObjectName(QStringLiteral("pageScrollArea"));
+    m_settingsScrollArea->setWidgetResizable(true);
+    m_settingsScrollArea->setFrameShape(QFrame::NoFrame);
+    m_settingsScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    m_settingsPage = new QWidget();
+    m_settingsPage->setObjectName(QStringLiteral("scrollPage"));
     auto *settingsLayout = new QVBoxLayout(m_settingsPage);
-    settingsLayout->setContentsMargins(0, 0, 0, 0);
-    settingsLayout->setSpacing(14);
+    settingsLayout->setContentsMargins(2, 0, 8, 2);
+    settingsLayout->setSpacing(12);
 
     auto *settingsNavLayout = new QHBoxLayout();
     settingsNavLayout->setContentsMargins(0, 0, 0, 0);
     m_settingsBackButton = new QPushButton(tr("Back"));
     m_settingsBackButton->setObjectName(QStringLiteral("backButton"));
+    m_settingsBackButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
     m_settingsBackButton->setCursor(Qt::PointingHandCursor);
     settingsNavLayout->addWidget(m_settingsBackButton);
     settingsNavLayout->addStretch(1);
@@ -579,7 +652,8 @@ void MainWindow::setupPages()
     settingsLayout->addWidget(settingsGroup);
     settingsLayout->addStretch(1);
 
-    m_stack->addWidget(m_settingsPage);
+    m_settingsScrollArea->setWidget(m_settingsPage);
+    m_stack->addWidget(m_settingsScrollArea);
     m_stack->setCurrentWidget(m_listPage);
 }
 
@@ -606,24 +680,33 @@ void MainWindow::applyTheme()
         "QWidget#centralwidget { background: %1; color: %4; }"
         "QWidget { color: %4; font-size: 10pt; }"
         "QStackedWidget#contentStack { background: transparent; }"
-        "QTableWidget { background: %2; border: 1px solid %6; border-radius: 12px;"
-        "  padding: 4px; gridline-color: transparent; outline: none; }"
-        "QTableWidget::item { border: none; padding: 8px 10px; }"
-        "QTableWidget::item:hover { background: %7; border-radius: 8px; }"
+        "QScrollArea#pageScrollArea { background: transparent; border: none; }"
+        "QWidget#scrollPage { background: transparent; }"
+        "QScrollBar:vertical { background: transparent; width: 10px; margin: 2px 0; }"
+        "QScrollBar::handle:vertical { background: %6; border-radius: 5px; min-height: 28px; }"
+        "QScrollBar::handle:vertical:hover { background: %5; }"
+        "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
+        "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
+        "QTableWidget { background: %2; border: 1px solid %6; border-radius: 8px;"
+        "  padding: 6px; gridline-color: transparent; outline: none; selection-background-color: %7; }"
+        "QTableWidget::item { border: none; padding: 9px 10px; }"
+        "QTableWidget::item:hover { background: %7; border-radius: 6px; }"
         "QHeaderView::section { background: %3; color: %5; border: none;"
         "  border-bottom: 1px solid %6; padding: 8px 10px; font-weight: 600; }"
         "QWidget#controlBar { background: transparent; }"
         "QLabel { color: %4; }"
-        "QLabel#detailName { font-size: 23pt; font-weight: 700; }"
+        "QLabel#listHint { color: %5; padding: 0 4px; }"
+        "QLabel#detailName { font-size: 22pt; font-weight: 700; }"
         "QLabel#detailBattery { color: %8; font-size: 12pt; font-weight: 700; }"
         "QLabel#detailStatus { color: %5; font-size: 12pt; }"
         "QLabel#rowTitle { color: %4; }"
         "QLabel#rowValue { color: %5; }"
-        "QFrame#detailGroup { background: %2; border: 1px solid %6; border-radius: 12px; }"
+        "QFrame#detailGroup { background: %2; border: 1px solid %6; border-radius: 8px; }"
         "QWidget#infoRow { background: transparent; }"
         "QPushButton { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
         "  padding: 7px 14px; font-weight: 600; }"
         "QPushButton:hover { background: %7; }"
+        "QPushButton:pressed { background: %3; }"
         "QPushButton#backButton { background: transparent; color: %8; border: none;"
         "  padding: 6px 2px; font-weight: 600; }"
         "QComboBox { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
@@ -949,8 +1032,9 @@ void MainWindow::showDeviceDetail(int row)
 
     m_currentDetailId = id;
     refreshDetailPage();
-    if (m_stack && m_detailPage) {
-        m_stack->setCurrentWidget(m_detailPage);
+    if (m_stack && m_detailScrollArea) {
+        m_stack->setCurrentWidget(m_detailScrollArea);
+        m_detailScrollArea->verticalScrollBar()->setValue(0);
     }
 }
 
@@ -964,8 +1048,9 @@ void MainWindow::showDeviceList()
 
 void MainWindow::showSettingsPage()
 {
-    if (m_stack && m_settingsPage) {
-        m_stack->setCurrentWidget(m_settingsPage);
+    if (m_stack && m_settingsScrollArea) {
+        m_stack->setCurrentWidget(m_settingsScrollArea);
+        m_settingsScrollArea->verticalScrollBar()->setValue(0);
     }
 }
 
@@ -1092,6 +1177,7 @@ void MainWindow::retranslateCombos()
 void MainWindow::retranslateUi()
 {
     // 重译设置页静态控件文本。
+    if (m_listHintLabel) m_listHintLabel->setText(tr("Double-click a device to edit device settings."));
     if (m_refreshButton) m_refreshButton->setText(tr("Refresh"));
     if (m_settingsButton) m_settingsButton->setText(tr("Settings"));
     if (m_settingsBackButton) m_settingsBackButton->setText(tr("Back"));
@@ -1317,10 +1403,10 @@ void MainWindow::updateTray(const QList<BatteryDevice> &devices)
         }
     }
 
-    const BatteryLevel lowest = lowestLevel(visible);
-    const QIcon icon = drawBatteryIcon(lowest, 32);
+    const BatteryIconState iconState = lowestIconState(visible);
+    const QIcon icon = drawBatteryIcon(iconState.level, iconState.percent, 32);
     m_tray->setIcon(icon);
-    setWindowIcon(drawBatteryIcon(lowest, 64));
+    setWindowIcon(drawBatteryIcon(iconState.level, iconState.percent, 64));
 
     if (visible.isEmpty()) {
         m_tray->setToolTip(tr("Battery Monitor - No devices"));

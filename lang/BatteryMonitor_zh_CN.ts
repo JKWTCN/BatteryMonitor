@@ -55,6 +55,12 @@
         <translation>刷新</translation>
     </message>
     <message>
+        <location filename="../mainwindow.cpp" line="417"/>
+        <location filename="../mainwindow.cpp" line="1133"/>
+        <source>Double-click a device to edit device settings.</source>
+        <translation>双击设备可编辑设备设置。</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="75"/>
         <source>Full</source>
         <translation>满电</translation>
