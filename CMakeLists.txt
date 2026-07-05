@@ -58,6 +58,8 @@ qt_add_executable(BatteryMonitor
     battery/XboxProvider.h
     util/AppSettings.cpp
     util/AppSettings.h
+    util/DeviceSettings.cpp
+    util/DeviceSettings.h
     util/Logger.cpp
     util/Logger.h
 )

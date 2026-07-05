@@ -222,5 +222,13 @@
         <source>Show</source>
         <translation>显示</translation>
     </message>
+    <message>
+        <source>Show in tray</source>
+        <translation>显示到托盘</translation>
+    </message>
+    <message>
+        <source>Low battery alert</source>
+        <translation>低电量提醒</translation>
+    </message>
 </context>
 </TS>

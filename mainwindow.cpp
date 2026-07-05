@@ -3,9 +3,11 @@
 
 #include "battery/BatteryManager.h"
 #include "util/AppSettings.h"
+#include "util/DeviceSettings.h"
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QColor>
 #include <QEvent>
@@ -23,7 +25,9 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QComboBox>
+#include <QSignalBlocker>
 #include <QSizePolicy>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QSystemTrayIcon>
 #include <QTableWidget>
@@ -201,6 +205,34 @@ QString percentText(int value)
 QString yesNoText(bool value)
 {
     return value ? MainWindow::tr("Yes") : MainWindow::tr("No");
+}
+
+// 该设备当前是否已达到用户为它配置的低电量阈值。
+//
+// 调用方应先用 DeviceSettings::alertEnabled(id) 判断是否启用提醒；
+// 本函数只负责“假设已启用，是否低于阈值”。
+//
+// 阈值是按“百分比”存储的；但部分设备只有离散档位（如 XInput 手柄，
+// percentage = -1），无法与百分比阈值直接比较。对此采用保守映射：
+//   Empty  -> 视为 5%
+//   Low    -> 视为 25%
+//   Medium -> 视为 55%
+//   Full   -> 视为 100%
+// 与 mainwindow.cpp 中 levelRepresentativePercent 保持一致。
+// 当设备精确百分比 >= 0 时直接与阈值比较。
+bool isAtOrBelowThreshold(const BatteryDevice &device, int threshold)
+{
+    // 阈值合法范围 1..100，<=0 视为关闭（防御性，正常路径走 alertEnabled）。
+    if (threshold <= 0) {
+        return false;
+    }
+    if (device.wired || !device.connected) {
+        return false;
+    }
+    if (device.percentage >= 0) {
+        return device.percentage <= threshold;
+    }
+    return levelRepresentativePercent(device.level) <= threshold;
 }
 
 QLabel *makeValueLabel(const QString &text = QString())
@@ -403,6 +435,38 @@ void MainWindow::setupPages()
     addInfoRow(airPodsLayout, tr("Case battery"), m_caseBatteryValue);
     addInfoRow(airPodsLayout, tr("Charging"), m_chargingValue);
     detailLayout->addWidget(m_airPodsGroup);
+
+    // —— 设备设置（每台设备持久化的偏好）——
+    // 显示在设备信息页底部：是否加入托盘 / 是否启用低电量提醒 / 提醒阈值。
+    // 控件值会随当前展示的设备切换而重新回填（refreshDetailPage 中处理）。
+    m_deviceSettingsGroup = makeInfoGroup();
+    auto *deviceSettingsLayout =
+        qobject_cast<QVBoxLayout *>(m_deviceSettingsGroup->layout());
+    m_deviceTrayRowTitle = new QLabel(tr("Show in tray"));
+    m_deviceThresholdRowTitle = new QLabel(tr("Low battery alert"));
+    m_deviceTrayCheck = new QCheckBox();
+    m_deviceTrayCheck->setObjectName(QStringLiteral("deviceTrayCheck"));
+    m_deviceAlertCheck = new QCheckBox();
+    m_deviceAlertCheck->setObjectName(QStringLiteral("deviceAlertCheck"));
+    m_deviceThresholdSpin = new QSpinBox();
+    m_deviceThresholdSpin->setObjectName(QStringLiteral("deviceThresholdSpin"));
+    // 阈值范围 1..100：启用 / 关闭由独立的 m_deviceAlertCheck 控制，
+    // 因此阈值本身不再允许 0。
+    m_deviceThresholdSpin->setRange(1, DeviceSettings::kMaxThreshold);
+    m_deviceThresholdSpin->setSuffix(QStringLiteral("%"));
+
+    // “低电量提醒阈值”行的 value 列是个复合控件：左为复选框（启用开关），
+    // 右为阈值数值框。复选框未勾选时阈值框灰显，避免产生“勾掉却还能调”的歧义。
+    auto *alertValueWidget = new QWidget();
+    auto *alertValueLayout = new QHBoxLayout(alertValueWidget);
+    alertValueLayout->setContentsMargins(0, 0, 0, 0);
+    alertValueLayout->setSpacing(10);
+    alertValueLayout->addWidget(m_deviceAlertCheck);
+    alertValueLayout->addWidget(m_deviceThresholdSpin, 1);
+
+    addInfoRow(deviceSettingsLayout, m_deviceTrayRowTitle, m_deviceTrayCheck);
+    addInfoRow(deviceSettingsLayout, m_deviceThresholdRowTitle, alertValueWidget);
+    detailLayout->addWidget(m_deviceSettingsGroup);
     detailLayout->addStretch(1);
 
     m_stack->addWidget(m_detailPage);
@@ -496,7 +560,15 @@ void MainWindow::applyTheme()
         "  padding: 6px 28px 6px 10px; }"
         "QComboBox:hover { background: %7; }"
         "QComboBox QAbstractItemView { background: %2; color: %4; border: 1px solid %6;"
-        "  selection-background-color: %8; selection-color: white; }")
+        "  selection-background-color: %8; selection-color: white; }"
+        "QSpinBox { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
+        "  padding: 6px 10px; }"
+        "QSpinBox::up-button, QSpinBox::down-button { width: 18px; }"
+        "QCheckBox { spacing: 8px; }"
+        "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px;"
+        "  border: 1px solid %6; background: %2; }"
+        "QCheckBox::indicator:hover { background: %7; }"
+        "QCheckBox::indicator:checked { background: %8; border-color: %8; }")
         .arg(base, group, groupAlt, text, secondary, border, hover, accent));
 
     m_applyingTheme = false;
@@ -537,6 +609,15 @@ void MainWindow::setupConnections()
             this, &MainWindow::onThemeChanged);
     connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
             this, &MainWindow::showDeviceDetail);
+
+    // 设备信息页“显示到托盘” / “启用提醒” / “阈值”变化即写盘。
+    connect(m_deviceTrayCheck, &QCheckBox::toggled,
+            this, &MainWindow::onDeviceTrayVisibleChanged);
+    connect(m_deviceAlertCheck, &QCheckBox::toggled,
+            this, &MainWindow::onDeviceAlertEnabledChanged);
+    connect(m_deviceThresholdSpin,
+            qOverload<int>(&QSpinBox::valueChanged),
+            this, &MainWindow::onDeviceThresholdChanged);
 
     connect(m_tray, &QSystemTrayIcon::activated,
             this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -636,6 +717,48 @@ void MainWindow::onQuit()
     // 关闭窗口（关闭事件此时会被 ignore，因为 quitOnLastWindowClosed=false；
     // 因此直接请求应用退出）。
     QCoreApplication::exit(0);
+}
+
+void MainWindow::onDeviceTrayVisibleChanged(bool checked)
+{
+    if (m_currentDetailId.isEmpty()) {
+        return;
+    }
+    DeviceSettings::setTrayVisible(m_currentDetailId, checked);
+    // 立即反映到托盘（被取消勾选的设备从 tooltip / 最低档位计算中移除）。
+    updateTray(m_devices);
+}
+
+void MainWindow::onDeviceAlertEnabledChanged(bool checked)
+{
+    if (m_currentDetailId.isEmpty()) {
+        return;
+    }
+    DeviceSettings::setAlertEnabled(m_currentDetailId, checked);
+    // 关闭提醒后阈值框灰显；开启后可继续编辑。
+    if (m_deviceThresholdSpin) {
+        m_deviceThresholdSpin->setEnabled(checked);
+    }
+    // notifyLowBattery 自身已具备完整状态机：
+    //   - 关闭后设备会被移出 currentLow，已提醒记录随之清除；
+    //   - 重新开启时若仍低于阈值，会作为“新出现的低电量”被提醒。
+    // 因此这里不需要手动操作 m_lowBatteryNotified。
+    notifyLowBattery(m_devices);
+}
+
+void MainWindow::onDeviceThresholdChanged(int value)
+{
+    if (m_currentDetailId.isEmpty()) {
+        return;
+    }
+    DeviceSettings::setLowBatteryThreshold(m_currentDetailId, value);
+    // 不能在这里 m_lowBatteryNotified.remove(id)！
+    // notifyLowBattery 内部已会基于最新阈值重新判断：
+    //   - 调高后仍低于阈值：设备在 m_lowBatteryNotified 里，不会重复提醒；
+    //   - 调低到不再低于阈值：自动从 m_lowBatteryNotified 移除，回升后能再提醒。
+    // 若在这里 remove，则每按一下数值框箭头都会清掉记录，触发一次提醒，
+    // 形成“调阈值过程中不停响”的现象。
+    notifyLowBattery(m_devices);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -799,6 +922,10 @@ void MainWindow::retranslateUi()
     if (m_quitAction) m_quitAction->setText(tr("Quit"));
     if (m_tray) m_tray->setToolTip(tr("Battery Monitor"));
 
+    // 设备信息页“设备设置”分组的标题与控件。
+    if (m_deviceTrayRowTitle) m_deviceTrayRowTitle->setText(tr("Show in tray"));
+    if (m_deviceThresholdRowTitle) m_deviceThresholdRowTitle->setText(tr("Low battery alert"));
+
     // 设置窗口标题（也会随 tr 刷新）。
     setWindowTitle(tr("Battery Monitor"));
 
@@ -847,6 +974,19 @@ void MainWindow::refreshDetailPage()
         m_rightBatteryValue->setText(percentText(device.rightPercent));
         m_caseBatteryValue->setText(percentText(device.casePercent));
         m_chargingValue->setText(yesNoText(device.charging));
+    }
+
+    // —— 回填设备级设置（屏蔽信号，避免回调写盘）——
+    if (m_deviceTrayCheck && m_deviceAlertCheck && m_deviceThresholdSpin) {
+        const QSignalBlocker b1(m_deviceTrayCheck);
+        const QSignalBlocker b2(m_deviceAlertCheck);
+        const QSignalBlocker b3(m_deviceThresholdSpin);
+        m_deviceTrayCheck->setChecked(DeviceSettings::trayVisible(id));
+        const bool alertOn = DeviceSettings::alertEnabled(id);
+        m_deviceAlertCheck->setChecked(alertOn);
+        m_deviceThresholdSpin->setValue(DeviceSettings::lowBatteryThreshold(id));
+        // 复选框未勾选时阈值框灰显。
+        m_deviceThresholdSpin->setEnabled(alertOn);
     }
 }
 
@@ -932,20 +1072,31 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
 
 void MainWindow::updateTray(const QList<BatteryDevice> &devices)
 {
-    const BatteryLevel lowest = lowestLevel(devices);
+    // 仅把“勾选了显示到托盘”的设备纳入托盘展示。
+    // 设备掉线重连后，因为偏好按 id 持久化，筛选结果保持一致。
+    QList<BatteryDevice> visible;
+    visible.reserve(devices.size());
+    for (const auto &device : devices) {
+        const QString id = QString::fromStdWString(device.id);
+        if (DeviceSettings::trayVisible(id)) {
+            visible.append(device);
+        }
+    }
+
+    const BatteryLevel lowest = lowestLevel(visible);
     const QIcon icon = drawBatteryIcon(lowest, 32);
     m_tray->setIcon(icon);
     setWindowIcon(drawBatteryIcon(lowest, 64));
 
-    if (devices.isEmpty()) {
+    if (visible.isEmpty()) {
         m_tray->setToolTip(tr("Battery Monitor - No devices"));
         return;
     }
 
     // tooltip 每设备一行。
     QStringList lines;
-    lines.reserve(devices.size());
-    for (const auto &device : devices) {
+    lines.reserve(visible.size());
+    for (const auto &device : visible) {
         lines << QStringLiteral("%1: %2")
                     .arg(QString::fromStdWString(device.name), batteryText(device));
     }
@@ -954,14 +1105,18 @@ void MainWindow::updateTray(const QList<BatteryDevice> &devices)
 
 void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
 {
-    // 收集当前低电量设备。
+    // 收集当前“达到各自阈值”的设备。
+    // 是否启用与阈值都是每台设备独立配置（DeviceSettings）：
+    //   默认启用 + 阈值 20%；未启用 alert 的设备永远不进 currentLow。
     QSet<QString> currentLow;
     for (const auto &device : devices) {
-        if (device.wired) {
+        const QString id = QString::fromStdWString(device.id);
+        if (!DeviceSettings::alertEnabled(id)) {
             continue;
         }
-        if (device.level == BatteryLevel::Empty || device.level == BatteryLevel::Low) {
-            currentLow.insert(QString::fromStdWString(device.id));
+        const int threshold = DeviceSettings::lowBatteryThreshold(id);
+        if (isAtOrBelowThreshold(device, threshold)) {
+            currentLow.insert(id);
         }
     }
 
@@ -981,7 +1136,7 @@ void MainWindow::notifyLowBattery(const QList<BatteryDevice> &devices)
             QSystemTrayIcon::Warning, 4000);
     }
 
-    // 电量回升后清掉记录，下次再低可以再次提醒。
+    // 电量回升（或被取消勾选提醒阈值）后清掉记录，下次再低可以再次提醒。
     for (auto it = m_lowBatteryNotified.begin(); it != m_lowBatteryNotified.end();) {
         if (!currentLow.contains(*it)) {
             it = m_lowBatteryNotified.erase(it);

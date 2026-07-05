@@ -18,11 +18,13 @@ QT_END_NAMESPACE
 class BatteryManager;
 class QSystemTrayIcon;
 class QAction;
+class QCheckBox;
 class QComboBox;
 class QEvent;
 class QFrame;
 class QLabel;
 class QPushButton;
+class QSpinBox;
 class QStackedWidget;
 class QWidget;
 
@@ -57,6 +59,12 @@ private slots:
     void onTrayActivated();
     void onToggleVisible();
     void onQuit();
+    // 设备信息页“显示到托盘”复选框被切换。
+    void onDeviceTrayVisibleChanged(bool checked);
+    // 设备信息页“低电量提醒启用”复选框被切换。
+    void onDeviceAlertEnabledChanged(bool checked);
+    // 设备信息页“低电量提醒阈值”数值被修改。
+    void onDeviceThresholdChanged(int value);
 
 private:
     void setupPages();
@@ -102,6 +110,16 @@ private:
     QLabel *m_rightBatteryValue = nullptr;
     QLabel *m_caseBatteryValue = nullptr;
     QLabel *m_chargingValue = nullptr;
+
+    // —— 设备信息页的“设备设置”分组控件 ——
+    // 与上方“只读信息行”不同：这里的 value 列是可交互控件。
+    // 这些控件只对应“当前展示的设备”（m_currentDetailId）。
+    QFrame *m_deviceSettingsGroup = nullptr;
+    QLabel *m_deviceTrayRowTitle = nullptr;
+    QLabel *m_deviceThresholdRowTitle = nullptr;
+    QCheckBox *m_deviceTrayCheck = nullptr;
+    QCheckBox *m_deviceAlertCheck = nullptr;
+    QSpinBox *m_deviceThresholdSpin = nullptr;
 
     // —— 设置页控件 ——
     QPushButton *m_refreshButton = nullptr;
