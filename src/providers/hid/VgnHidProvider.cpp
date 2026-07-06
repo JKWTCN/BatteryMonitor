@@ -1050,57 +1050,115 @@ std::vector<BatteryDevice> VgnHidProvider::readDevices()
     }
 
     // 第二遍：对每个设备依次尝试候选接口直到成功。
+    //
+    // 接口缓存：hidapi 枚举顺序不稳定，且同一设备常只有一个接口能成功 hid_write。
+    // 记住上次成功的接口 path，下轮优先（且只先）查它；命中即跳过该设备其余接口的
+    // 无谓发包。缓存接口本轮失败（设备休眠/被独占）时回退该设备其余接口的全量遍历，
+    // 成功后更新缓存；缓存 path 已不在枚举结果里（拔插/换口）时自然失效。
+    auto tryInterface = [&](const Candidate &cand) -> std::optional<BatteryDevice> {
+        const hid_device_info *cur = cand.info;
+        const std::wstring path = pathToWString(cur->path);
+
+        LOG_VERBOSE_W(L"[VGN] interface: vid=0x" + toHex4(cur->vendor_id) +
+              L" pid=0x" + toHex4(cur->product_id) +
+              L" usage_page=0x" + toHex4(cur->usage_page) +
+              L" usage=0x" + toHex4(cur->usage) +
+              L" family=" + std::to_wstring(static_cast<int>(cand.entry.family)) +
+              (cand.usedFallback ? L" (VID fallback)" : L"") +
+              L" path=" + path);
+
+        const std::wstring id = L"vgn:" + path;
+        std::wstring name = cur->product_string ? cur->product_string : L"";
+        if (name.empty()) {
+            name = cand.entry.name;
+        }
+
+        hid_device *dev = hid_open_path(cur->path);
+        if (!dev) {
+            LOG_VERBOSE_W(L"[VGN]   hid_open_path failed for " + name + L": " +
+                       std::wstring(hid_error(nullptr) ? hid_error(nullptr) : L"unknown"));
+            return std::nullopt; // 试同设备下一个候选接口
+        }
+
+        std::optional<BatteryDevice> result;
+        try {
+            result = queryByFamily(dev, cand.entry, id, name);
+            if (result) {
+                LOG_VERBOSE_W(L"[VGN]   " + name + L" = " +
+                      std::to_wstring(result->percentage) +
+                      L"% charging=" + (result->charging ? L"1" : L"0"));
+            } else {
+                LOG_VERBOSE_W(L"[VGN]   " + name + L" query returned no data on this interface");
+            }
+        } catch (const std::exception &e) {
+            LOG_ERR_W(L"[VGN]   query threw for " + name + L": " +
+                      std::wstring(e.what(), e.what() + std::strlen(e.what())));
+        } catch (...) {
+            LOG_ERR_W(L"[VGN]   query threw unknown exception for " + name);
+        }
+
+        hid_close(dev);
+        return result;
+    };
+
     for (auto &g : grouped) {
         bool got = false;
-        for (const Candidate &cand : g.second) {
-            const hid_device_info *cur = cand.info;
-            const std::wstring path = pathToWString(cur->path);
+        const char *successPath = nullptr; // 本轮真正成功的接口 path（用于刷新缓存）
 
-            LOG_VERBOSE_W(L"[VGN] interface: vid=0x" + toHex4(cur->vendor_id) +
-                  L" pid=0x" + toHex4(cur->product_id) +
-                  L" usage_page=0x" + toHex4(cur->usage_page) +
-                  L" usage=0x" + toHex4(cur->usage) +
-                  L" family=" + std::to_wstring(static_cast<int>(cand.entry.family)) +
-                  (cand.usedFallback ? L" (VID fallback)" : L"") +
-                  L" path=" + path);
-
-            const std::wstring id = L"vgn:" + path;
-            std::wstring name = cur->product_string ? cur->product_string : L"";
-            if (name.empty()) {
-                name = cand.entry.name;
-            }
-
-            hid_device *dev = hid_open_path(cur->path);
-            if (!dev) {
-                LOG_VERBOSE_W(L"[VGN]   hid_open_path failed for " + name + L": " +
-                           std::wstring(hid_error(nullptr) ? hid_error(nullptr) : L"unknown"));
-                continue; // 试同设备下一个候选接口
-            }
-
-            try {
-                auto result = queryByFamily(dev, cand.entry, id, name);
-                if (result) {
-                    devices.push_back(*result);
-                    got = true;
-                    LOG_VERBOSE_W(L"[VGN]   " + name + L" = " +
-                          std::to_wstring(result->percentage) +
-                          L"% charging=" + (result->charging ? L"1" : L"0"));
-                } else {
-                    LOG_VERBOSE_W(L"[VGN]   " + name + L" query returned no data on this interface");
+        // 优先试缓存命中接口。命中成功即跳过该设备其余接口的无谓遍历。
+        const auto cacheIt = m_lastGoodPath.find(g.first);
+        if (cacheIt != m_lastGoodPath.end()) {
+            for (const Candidate &cand : g.second) {
+                if (std::strcmp(cand.info->path, cacheIt->second.c_str()) == 0) {
+                    LOG_VERBOSE_W(L"[VGN]   trying cached interface path first");
+                    if (auto result = tryInterface(cand)) {
+                        devices.push_back(*result);
+                        got = true;
+                        successPath = cand.info->path;
+                    }
+                    break; // 缓存接口只试一次（无论成败不再在本块重试）
                 }
-            } catch (const std::exception &e) {
-                LOG_ERR_W(L"[VGN]   query threw for " + name + L": " +
-                          std::wstring(e.what(), e.what() + std::strlen(e.what())));
-            } catch (...) {
-                LOG_ERR_W(L"[VGN]   query threw unknown exception for " + name);
-            }
-
-            hid_close(dev);
-            if (got) {
-                break; // 同设备已成功，不再试其它接口
             }
         }
+
+        // 回退遍历：缓存未命中 / 缓存接口本轮失败时，逐个试其余候选接口直到成功。
+        if (!got) {
+            for (const Candidate &cand : g.second) {
+                if (cacheIt != m_lastGoodPath.end() &&
+                    std::strcmp(cand.info->path, cacheIt->second.c_str()) == 0) {
+                    continue; // 缓存接口刚才已试过，跳过
+                }
+                if (auto result = tryInterface(cand)) {
+                    devices.push_back(*result);
+                    got = true;
+                    successPath = cand.info->path;
+                    break; // 同设备已成功，不再试其它接口
+                }
+            }
+        }
+
+        if (got && successPath) {
+            // 成功后（无论来自缓存接口还是回退接口）刷新缓存，记录本轮真正成功的 path。
+            m_lastGoodPath[g.first] = successPath;
+        }
+
         if (!got && !g.second.empty()) {
+            // 全部失败：若缓存 path 已不在本轮候选里（设备拔插/换口），清掉死路径缓存，
+            // 避免长期记住一个再也不会出现的接口。缓存接口仍在但本轮无响应时保留缓存，
+            // 下一轮继续优先试它（设备只是暂时休眠）。
+            if (cacheIt != m_lastGoodPath.end()) {
+                bool stillPresent = false;
+                for (const Candidate &cand : g.second) {
+                    if (std::strcmp(cand.info->path, cacheIt->second.c_str()) == 0) {
+                        stillPresent = true;
+                        break;
+                    }
+                }
+                if (!stillPresent) {
+                    m_lastGoodPath.erase(g.first);
+                }
+            }
+
             const auto &cand0 = g.second.front();
             std::wstring name = cand0.info->product_string ? cand0.info->product_string : L"";
             if (name.empty()) {

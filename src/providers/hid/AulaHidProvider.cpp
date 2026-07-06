@@ -527,34 +527,25 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
           L" interface(s)");
 
     // 同一物理设备常暴露多个接口；按 PID 去重，避免对一台设备查询多次。
-    // （枚举顺序中通常配置接口排在输入接口之后或之前，命中第一个匹配接口即足够。）
+    //
+    // 接口缓存：Dongle 常暴露多个同 PID 的 vendor-defined 接口，但只有一个能成功
+    // 响应电量协议。原「边枚举边查、失败不去重」会让每个匹配接口每轮都重发
+    // 0x10/0xA0。记住上次成功的接口 path，下轮优先（且只先）查它；命中即跳过同 PID
+    // 其余接口的无谓发包。缓存接口本轮失败（设备休眠/被独占）时回退该设备其余接口
+    // 的全量遍历，成功后更新缓存；缓存 path 已不在枚举结果里（拔插/换口）时自然失效。
     std::unordered_set<std::uint16_t> processedPids;
 
-    for (hid_device_info *cur = enumHead; cur; cur = cur->next) {
-        // 打印每个接口的描述符信息，便于排查 usage 过滤是否合理。
+    // 单接口查询：打开设备 → 双协议尝试（0x10 → 0xA0）→ 解析。
+    // 返回成功解析的 BatteryDevice；失败返回 nullopt。
+    auto tryInterface = [&](hid_device_info *cur,
+                            const AulaDeviceEntry *entry) -> std::optional<BatteryDevice> {
         LOG_VERBOSE_W(L"[HID] interface: pid=0x" +
               std::wstring{toHex4(cur->product_id)} +
               L" usage_page=0x" + std::wstring{toHex4(cur->usage_page)} +
               L" usage=0x" + std::wstring{toHex4(cur->usage)} +
               L" path=" + pathToWString(cur->path));
 
-        const AulaDeviceEntry *entry = findAulaEntry(cur->product_id);
-        if (!entry) {
-            LOG_VERBOSE_W(L"[HID]   -> skipped (pid not in AULA device table)");
-            continue;
-        }
-        if (!interfaceMatches(*entry, *cur)) {
-            LOG_VERBOSE_W(L"[HID]   -> skipped (interface usage does not match entry)");
-            continue;
-        }
-        // 该 PID 已有设备产出，跳过同设备的其它接口。
-        if (processedPids.count(cur->product_id) != 0) {
-            LOG_VERBOSE_W(L"[HID]   -> skipped (pid already queried this cycle)");
-            continue;
-        }
-
         const std::wstring id = L"hid:" + pathToWString(cur->path);
-        // 设备名优先用 product_string；取不到则按 PID 兜底命名。
         std::wstring name = cur->product_string ? cur->product_string : L"";
         if (name.empty()) {
             name = L"AULA Device 0x" + std::wstring{toHex4(cur->product_id)};
@@ -564,9 +555,10 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
         if (!dev) {
             LOG_WARN_W(L"[HID]   hid_open_path failed for " + name + L": " +
                        std::wstring(hid_error(nullptr) ? hid_error(nullptr) : L"unknown"));
-            continue;
+            return std::nullopt;
         }
 
+        std::optional<BatteryDevice> out;
         try {
             // 先尝试新协议（cmd=0x10），新设备优先；
             // 若响应全 0 / 无效或无响应，回退旧协议（cmd=0xA0）。
@@ -593,11 +585,10 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
             }
 
             if (payload && usedProto) {
-                devices.push_back(parseDeviceInfo(*payload, *usedProto, name, id));
-                processedPids.insert(cur->product_id);
+                out = parseDeviceInfo(*payload, *usedProto, name, id);
                 LOG_VERBOSE_W(L"[HID]   " + name + L" = " +
-                      std::to_wstring(devices.back().percentage) +
-                      L"% charging=" + (devices.back().charging ? L"1" : L"0"));
+                      std::to_wstring(out->percentage) +
+                      L"% charging=" + (out->charging ? L"1" : L"0"));
             } else {
                 LOG_WARN_W(L"[HID]   " + name +
                            L" getDeviceInfo returned no valid data "
@@ -611,6 +602,80 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
         }
 
         hid_close(dev);
+        return out;
+    };
+
+    // 第一遍：只对缓存命中的 PID + 匹配 path 的接口查询。
+    for (hid_device_info *cur = enumHead; cur; cur = cur->next) {
+        if (processedPids.count(cur->product_id) != 0) {
+            continue;
+        }
+        const AulaDeviceEntry *entry = findAulaEntry(cur->product_id);
+        if (!entry || !interfaceMatches(*entry, *cur)) {
+            continue;
+        }
+        const auto cacheIt = m_lastGoodPath.find(cur->product_id);
+        if (cacheIt == m_lastGoodPath.end()) {
+            continue; // 该 PID 无缓存，留给第二遍
+        }
+        if (std::strcmp(cur->path, cacheIt->second.c_str()) != 0) {
+            continue; // 该接口非缓存接口，留给第二遍
+        }
+        LOG_VERBOSE_W(L"[HID]   trying cached interface path first");
+        if (auto result = tryInterface(cur, entry)) {
+            devices.push_back(*result);
+            processedPids.insert(cur->product_id);
+            m_lastGoodPath[cur->product_id] = cur->path; // 刷新（path 一般不变，等价写回）
+        }
+    }
+
+    // 第二遍：对未命中的 PID（或第一遍缓存接口失败的 PID）遍历其余接口，成功即停。
+    for (hid_device_info *cur = enumHead; cur; cur = cur->next) {
+        if (processedPids.count(cur->product_id) != 0) {
+            continue; // 该 PID 本轮已成功，跳过同设备其它接口
+        }
+        const AulaDeviceEntry *entry = findAulaEntry(cur->product_id);
+        if (!entry) {
+            LOG_VERBOSE_W(L"[HID]   -> skipped (pid not in AULA device table)");
+            continue;
+        }
+        if (!interfaceMatches(*entry, *cur)) {
+            LOG_VERBOSE_W(L"[HID]   -> skipped (interface usage does not match entry)");
+            continue;
+        }
+        const auto cacheIt = m_lastGoodPath.find(cur->product_id);
+        if (cacheIt != m_lastGoodPath.end() &&
+            std::strcmp(cur->path, cacheIt->second.c_str()) == 0) {
+            continue; // 缓存接口刚才已在第一遍试过，跳过
+        }
+
+        if (auto result = tryInterface(cur, entry)) {
+            devices.push_back(*result);
+            processedPids.insert(cur->product_id);
+            m_lastGoodPath[cur->product_id] = cur->path; // 成功后更新缓存
+        }
+    }
+
+    // 清死路径：有缓存但本轮该 PID 所有接口都失败的，若缓存 path 已不在枚举结果里
+    //（拔插/换口），清掉缓存；缓存接口仍在但无响应时保留，下一轮继续优先试。
+    for (auto it = m_lastGoodPath.begin(); it != m_lastGoodPath.end();) {
+        if (processedPids.count(it->first) != 0) {
+            ++it; // 本轮已成功，缓存有效
+            continue;
+        }
+        bool stillPresent = false;
+        for (hid_device_info *cur = enumHead; cur; cur = cur->next) {
+            if (cur->product_id == it->first &&
+                std::strcmp(cur->path, it->second.c_str()) == 0) {
+                stillPresent = true;
+                break;
+            }
+        }
+        if (!stillPresent) {
+            it = m_lastGoodPath.erase(it);
+        } else {
+            ++it;
+        }
     }
 
     hid_free_enumeration(enumHead);

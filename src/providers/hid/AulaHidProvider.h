@@ -2,6 +2,10 @@
 
 #include "src/core/IBatteryProvider.h"
 
+#include <cstdint>
+#include <string>
+#include <unordered_map>
+
 // HID 电量提供者：通过 hidapi 读取 AULA 品牌（VID=0x0C45）2.4G 接收器
 // 后挂接的键盘 / 鼠标的电量。
 //
@@ -39,4 +43,9 @@ class AulaHidProvider : public IBatteryProvider
 public:
     std::wstring displayName() const override;
     std::vector<BatteryDevice> readDevices() override;
+
+private:
+    // 上次查询成功的接口 path，按 PID 缓存（VID 固定 0x0C45）。
+    // 命中则优先只查该接口；失败/失效回退该设备其余接口的全量遍历，成功后更新。
+    std::unordered_map<std::uint16_t, std::string> m_lastGoodPath;
 };

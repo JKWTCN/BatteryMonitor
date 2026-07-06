@@ -2,6 +2,10 @@
 
 #include "src/core/IBatteryProvider.h"
 
+#include <cstdint>
+#include <string>
+#include <unordered_map>
+
 // HID 电量提供者：通过 hidapi 读取 VGN / 关联品牌 2.4G 接收器
 // 后挂接的键盘 / 鼠标的电量。
 //
@@ -90,4 +94,9 @@ class VgnHidProvider : public IBatteryProvider
 public:
     std::wstring displayName() const override;
     std::vector<BatteryDevice> readDevices() override;
+
+private:
+    // 上次查询成功的接口 path，按 (VID<<16)|PID 缓存。
+    // 命中则优先只查该接口；失败/失效回退该设备其余接口的全量遍历，成功后更新。
+    std::unordered_map<std::uint64_t, std::string> m_lastGoodPath;
 };
