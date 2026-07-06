@@ -15,73 +15,109 @@ using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 
 namespace
 {
-// RSSI 阈值：低于此值（信号太弱）的广播丢弃。
-constexpr short kRssiThreshold = -75;
+    // RSSI 阈值：低于此值（信号太弱）的广播丢弃。
+    constexpr short kRssiThreshold = -75;
 
-// Apple Continuity 厂商数据 CompanyId = 0x004C = 76。
-constexpr uint16_t kAppleCompanyId = 76;
+    // Apple Continuity 厂商数据 CompanyId = 0x004C = 76。
+    constexpr uint16_t kAppleCompanyId = 76;
 
-// AirPods continuity payload 的类型标识。
-constexpr uint8_t kAirPodsAdvType = 0x07;
+    // AirPods continuity payload 的类型标识。
+    constexpr uint8_t kAirPodsAdvType = 0x07;
 
-// AirPods Max 系列型号 ID（这类设备的百分比算法与其它不同：+5 偏移）。
-// 0x2002 = AirPods Max, 0x200F 之外的有线/无线差异。
-bool isMaxModel(uint16_t modelId)
-{
-    return modelId == 0x2002 || modelId == 0x2017; // 0x2017 = 8223 (AirPods Max USB-C)
-}
+    // AirPods Max 系列型号 ID（这类设备的百分比算法与其它不同：+5 偏移）。
+    // 0x2002 = AirPods Max, 0x200F 之外的有线/无线差异。
+    bool isMaxModel(uint16_t modelId)
+    {
+        return modelId == 0x2002 || modelId == 0x2017; // 0x2017 = 8223 (AirPods Max USB-C)
+    }
 
-// nibble(0-15) -> 百分比：
-//   15 -> -1（未知）；>=10 -> 100%；<0 -> -1；其余 nib*10（Max 型号 +5）。
-int nibbleToPercent(int nib, uint16_t modelId)
-{
-    if (nib == 15) {
-        return -1;
+    // nibble(0-15) -> 百分比：
+    //   15 -> -1（未知）；>=10 -> 100%；<0 -> -1；其余 nib*10（Max 型号 +5）。
+    int nibbleToPercent(int nib, uint16_t modelId)
+    {
+        if (nib == 15)
+        {
+            return -1;
+        }
+        if (nib >= 10)
+        {
+            return 100;
+        }
+        if (nib < 0)
+        {
+            return -1;
+        }
+        const int base = nib * 10;
+        const int v = isMaxModel(modelId) ? base + 5 : base;
+        return (v > 100) ? 100 : ((v < 0) ? 0 : v);
     }
-    if (nib >= 10) {
-        return 100;
-    }
-    if (nib < 0) {
-        return -1;
-    }
-    const int base = nib * 10;
-    const int v = isMaxModel(modelId) ? base + 5 : base;
-    return (v > 100) ? 100 : ((v < 0) ? 0 : v);
-}
 
-// 精确百分比 -> 离散档位（与 BluetoothProvider 一致）。
-BatteryLevel levelFromPercentage(int pct)
-{
-    if (pct < 0) {
-        return BatteryLevel::Unknown;
+    // 精确百分比 -> 离散档位（与 BluetoothProvider 一致）。
+    BatteryLevel levelFromPercentage(int pct)
+    {
+        if (pct < 0)
+        {
+            return BatteryLevel::Unknown;
+        }
+        if (pct >= 80)
+        {
+            return BatteryLevel::Full;
+        }
+        if (pct >= 50)
+        {
+            return BatteryLevel::Medium;
+        }
+        if (pct >= 20)
+        {
+            return BatteryLevel::Low;
+        }
+        return BatteryLevel::Empty;
     }
-    if (pct >= 80) {
-        return BatteryLevel::Full;
-    }
-    if (pct >= 50) {
-        return BatteryLevel::Medium;
-    }
-    if (pct >= 20) {
-        return BatteryLevel::Low;
-    }
-    return BatteryLevel::Empty;
-}
 
-// Apple 音频设备型号表：modelId -> 友好名。
-// modelId 由 payload[3..4] 解码（data[3] 低字节、data[4] 高字节），值即下表的 key。
-const std::map<uint16_t, std::wstring> &modelTable()
-{
-    static const std::map<uint16_t, std::wstring> kTable = {
-        {0x2002, L"AirPods Max"},
-        {0x2003, L"PowerBeats 3"},
-        {0x200D, L"Beats Solo 3"},
-        {0x200E, L"AirPods Pro"},
-        {0x200F, L"AirPods 2"},
-        {0x2013, L"AirPods Pro 2"},
-        {0x2017, L"AirPods Max (USB-C)"},
-        {0x2019, L"PowerBeats Pro"},
-        {0x2011, L"AirPods 3"},
-        {0x201F, L"AirPods Pro 3"},
+    // Apple 音频设备型号表：modelId -> 友好名。
+    // modelId 由 payload[3..4] 解码（data[3] 低字节、data[4] 高字节），值即下表的 key。
+    const std::map<uint16_t, std::wstring> &modelTable()
+    {
+        static const std::map<uint16_t, std::wstring> kTable = {
+            static const std::unordered_map<uint16_t, std::wstring_view> kAppleProximityModels =
+                {
+                    // AirPods
+                    {0x0220, L"AirPods (1st generation)"},
+                    {0x0F20, L"AirPods (2nd generation)"},
+                    {0x1320, L"AirPods (3rd generation)"},
+                    {0x1920, L"AirPods (4th generation)"},
+                    {0x1B20, L"AirPods (4th generation, ANC)"},
+
+                    {0x0E20, L"AirPods Pro (1st generation)"},
+                    {0x1420, L"AirPods Pro (2nd generation)"},
+                    {0x2420, L"AirPods Pro (2nd generation, USB-C)"},
+                    {0x2720, L"AirPods Pro 3"},
+
+                    {0x0A20, L"AirPods Max"},
+                    {0x1F20, L"AirPods Max (USB-C)"},
+                    {0x2D20, L"AirPods Max 2"},
+
+                    // Beats
+                    {0x0520, L"BeatsX"},
+                    {0x1020, L"Beats Flex"},
+
+                    {0x0620, L"Beats Solo 3"},
+                    {0x0C20, L"Beats Solo Pro"},
+                    {0x2520, L"Beats Solo 4"},
+                    {0x2620, L"Beats Solo Buds"},
+
+                    {0x0920, L"Beats Studio 3"},
+                    {0x1120, L"Beats Studio Buds"},
+                    {0x1620, L"Beats Studio Buds+"},
+                    {0x1720, L"Beats Studio Pro"},
+
+                    {0x0320, L"Powerbeats 3"},
+                    {0x0D20, L"Powerbeats 4"},
+                    {0x0B20, L"Powerbeats Pro"},
+                    {0x1D20, L"Powerbeats Pro 2"},
+
+                    {0x1220, L"Beats Fit Pro"},
+                };
     };
     return kTable;
 }
@@ -91,7 +127,8 @@ std::wstring modelDisplayName(uint16_t modelId)
 {
     const auto &table = modelTable();
     const auto it = table.find(modelId);
-    if (it != table.end()) {
+    if (it != table.end())
+    {
         return it->second;
     }
     wchar_t buf[64] = {};
@@ -107,11 +144,15 @@ AirPodsProvider::AirPodsProvider() = default;
 
 AirPodsProvider::~AirPodsProvider()
 {
-    if (m_watcherStarted && m_watcher) {
-        try {
+    if (m_watcherStarted && m_watcher)
+    {
+        try
+        {
             m_watcher.Received(m_receivedToken);
             m_watcher.Stop();
-        } catch (...) {
+        }
+        catch (...)
+        {
         }
     }
 }
@@ -123,10 +164,12 @@ std::wstring AirPodsProvider::displayName() const
 
 void AirPodsProvider::ensureWatcherStarted()
 {
-    if (m_watcherStarted) {
+    if (m_watcherStarted)
+    {
         return;
     }
-    try {
+    try
+    {
         m_watcher = BluetoothLEAdvertisementWatcher();
         m_watcher.ScanningMode(BluetoothLEScanningMode::Active);
         // 不设 ManufacturerData 过滤（构造空数据在某些 SDK 版本上会失败），
@@ -137,9 +180,13 @@ void AirPodsProvider::ensureWatcherStarted()
         m_watcherStarted = true;
         LOG_W(L"[AirPods] watcher started (Apple CompanyId=0x004C, RSSI>=" +
               std::to_wstring(kRssiThreshold) + L"dBm)");
-    } catch (const winrt::hresult_error &e) {
+    }
+    catch (const winrt::hresult_error &e)
+    {
         LOG_ERR_W(L"[AirPods] watcher start FAILED: " + std::wstring(e.message()));
-    } catch (...) {
+    }
+    catch (...)
+    {
         LOG_ERR("[AirPods] watcher start FAILED (unknown)");
     }
 }
@@ -148,18 +195,23 @@ void AirPodsProvider::onAdvertisementReceived(
     const BluetoothLEAdvertisementWatcher & /*sender*/,
     const BluetoothLEAdvertisementReceivedEventArgs &args)
 {
-    try {
+    try
+    {
         const short rssi = args.RawSignalStrengthInDBm();
-        if (rssi < kRssiThreshold) {
+        if (rssi < kRssiThreshold)
+        {
             return; // 信号太弱，丢弃。
         }
         // 遍历厂商数据，找 Apple 的。
-        for (const auto &md : args.Advertisement().ManufacturerData()) {
-            if (md.CompanyId() != kAppleCompanyId) {
+        for (const auto &md : args.Advertisement().ManufacturerData())
+        {
+            if (md.CompanyId() != kAppleCompanyId)
+            {
                 continue;
             }
             const auto buf = md.Data();
-            if (!buf || buf.Length() < 25) {
+            if (!buf || buf.Length() < 25)
+            {
                 continue;
             }
             std::vector<uint8_t> data(buf.Length());
@@ -170,7 +222,8 @@ void AirPodsProvider::onAdvertisementReceived(
             int left = -1, right = -1, casePct = -1;
             bool charging = false;
             if (!parseApplePayload(data.data(), data.size(),
-                                   name, left, right, casePct, charging)) {
+                                   name, left, right, casePct, charging))
+            {
                 continue;
             }
 
@@ -187,14 +240,18 @@ void AirPodsProvider::onAdvertisementReceived(
                 d.lastSeen = std::chrono::steady_clock::now();
             }
             LOG_VERBOSE_W(L"[AirPods] RX " + name + L" L=" + std::to_wstring(left) +
-                  L"% R=" + std::to_wstring(right) + L"% Case=" +
-                  std::to_wstring(casePct) + L"% rssi=" + std::to_wstring(rssi) +
-                  L"dBm");
+                          L"% R=" + std::to_wstring(right) + L"% Case=" +
+                          std::to_wstring(casePct) + L"% rssi=" + std::to_wstring(rssi) +
+                          L"dBm");
             break; // 每个广播包只处理第一个 Apple 厂商数据。
         }
-    } catch (const winrt::hresult_error &e) {
+    }
+    catch (const winrt::hresult_error &e)
+    {
         LOG_ERR_W(L"[AirPods] received handler error: " + std::wstring(e.message()));
-    } catch (...) {
+    }
+    catch (...)
+    {
     }
 }
 
@@ -202,10 +259,12 @@ bool AirPodsProvider::parseApplePayload(const uint8_t *data, std::size_t len,
                                         std::wstring &modelName, int &left,
                                         int &right, int &casePct, bool &charging)
 {
-    if (len < 25) {
+    if (len < 25)
+    {
         return false;
     }
-    if (data[0] != kAirPodsAdvType) {
+    if (data[0] != kAirPodsAdvType)
+    {
         return false; // 非 AirPods continuity 类型。
     }
     const uint16_t modelId = static_cast<uint16_t>((data[4] << 8) | data[3]);
@@ -242,9 +301,12 @@ bool AirPodsProvider::parseApplePayload(const uint8_t *data, std::size_t len,
 std::vector<BatteryDevice> AirPodsProvider::readDevices()
 {
     // 惰性初始化 WinRT apartment（在 worker 线程）。
-    try {
+    try
+    {
         winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    } catch (...) {
+    }
+    catch (...)
+    {
     }
     ensureWatcherStarted();
 
@@ -255,18 +317,23 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
     std::vector<std::pair<uint64_t, AdvDevice>> snapshot;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        for (auto it = m_devices.begin(); it != m_devices.end();) {
-            if (now - it->second.lastSeen > kStaleTimeout) {
+        for (auto it = m_devices.begin(); it != m_devices.end();)
+        {
+            if (now - it->second.lastSeen > kStaleTimeout)
+            {
                 LOG_VERBOSE_W(L"[AirPods] drop stale device: " + it->second.name);
                 it = m_devices.erase(it);
-            } else {
+            }
+            else
+            {
                 snapshot.emplace_back(it->first, it->second);
                 ++it;
             }
         }
     }
 
-    for (const auto &[addr, adv] : snapshot) {
+    for (const auto &[addr, adv] : snapshot)
+    {
         BatteryDevice device;
         device.id = L"airpods:" + std::to_wstring(addr);
         device.name = adv.name;
@@ -278,8 +345,10 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
         device.charging = adv.charging;
         // 百分比取三路有效值的最低，用于排序 / 低电量提醒 / 整体进度条。
         int minPct = -1;
-        for (int v : {adv.leftPercent, adv.rightPercent, adv.casePercent}) {
-            if (v >= 0 && (minPct < 0 || v < minPct)) {
+        for (int v : {adv.leftPercent, adv.rightPercent, adv.casePercent})
+        {
+            if (v >= 0 && (minPct < 0 || v < minPct))
+            {
                 minPct = v;
             }
         }
