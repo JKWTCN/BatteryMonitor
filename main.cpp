@@ -4,12 +4,14 @@
 #include "src/providers/bluetooth/BluetoothProvider.h"
 #include "src/providers/bluetooth/ClassicBluetoothProvider.h"
 #include "src/providers/hid/AulaHidProvider.h"
+#include "src/providers/hid/RazerHidProvider.h"
 #include "src/providers/hid/VgnHidProvider.h"
 #include "src/providers/xbox/XboxProvider.h"
 #include "util/AppSettings.h"
 #include "util/Logger.h"
 #include "GeneratedAppVersion.h"
 
+#include <QAbstractNativeEventFilter>
 #include <QApplication>
 #include <QCoreApplication>
 #include <QIcon>
@@ -17,11 +19,97 @@
 #include <QPalette>
 #include <QTranslator>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 namespace
 {
 // 应用全局唯一翻译器（堆上，生命周期与 QApplication 相同）。
 // 切换语言时由 retranslate() 卸载并重新 load + install。
 QTranslator *g_translator = nullptr;
+
+#ifdef Q_OS_WIN
+constexpr wchar_t kSingleInstanceMutexName[] = L"Local\\BatteryMonitor.SingleInstance";
+constexpr wchar_t kShowMainWindowMessageName[] = L"BatteryMonitor.ShowMainWindow";
+
+class SingleInstanceGuard
+{
+public:
+    SingleInstanceGuard()
+        : m_message(RegisterWindowMessageW(kShowMainWindowMessageName))
+    {
+        m_mutex = CreateMutexW(nullptr, FALSE, kSingleInstanceMutexName);
+        const DWORD error = GetLastError();
+        m_hasRunningInstance =
+            (m_mutex && error == ERROR_ALREADY_EXISTS) ||
+            (!m_mutex && error == ERROR_ACCESS_DENIED);
+    }
+
+    ~SingleInstanceGuard()
+    {
+        if (m_mutex) {
+            CloseHandle(m_mutex);
+        }
+    }
+
+    bool hasRunningInstance() const { return m_hasRunningInstance; }
+    UINT showMainWindowMessage() const { return m_message; }
+
+    void notifyRunningInstance() const
+    {
+        if (m_message != 0) {
+            PostMessageW(HWND_BROADCAST, m_message, 0, 0);
+        }
+    }
+
+private:
+    HANDLE m_mutex = nullptr;
+    UINT m_message = 0;
+    bool m_hasRunningInstance = false;
+};
+
+void showExistingMainWindow(MainWindow *window)
+{
+    if (!window) {
+        return;
+    }
+    window->showNormal();
+    window->raise();
+    window->activateWindow();
+}
+
+class ShowMainWindowEventFilter : public QAbstractNativeEventFilter
+{
+public:
+    ShowMainWindowEventFilter(MainWindow *window, UINT message)
+        : m_window(window), m_message(message)
+    {
+    }
+
+    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override
+    {
+        Q_UNUSED(eventType);
+        Q_UNUSED(result);
+
+        if (m_message == 0 || !message) {
+            return false;
+        }
+
+        const auto *msg = static_cast<MSG *>(message);
+        if (msg->message != m_message) {
+            return false;
+        }
+
+        showExistingMainWindow(m_window);
+        return true;
+    }
+
+private:
+    MainWindow *m_window = nullptr;
+    UINT m_message = 0;
+};
+#endif
 
 // 把指定语言代码加载为当前翻译。
 //   code 为空 -> 跟随系统（依次试 QLocale::system().uiLanguages()）。
@@ -108,6 +196,14 @@ void applyApplicationTheme(const QString &theme)
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_WIN
+    SingleInstanceGuard singleInstance;
+    if (singleInstance.hasRunningInstance()) {
+        singleInstance.notifyRunningInstance();
+        return 0;
+    }
+#endif
+
     QApplication a(argc, argv);
     a.setApplicationName(QStringLiteral("BatteryMonitor"));
     a.setOrganizationName(QStringLiteral("BatteryMonitor"));
@@ -135,6 +231,7 @@ int main(int argc, char *argv[])
     //   AirPodsProvider           —— AirPods/Beats（Apple Continuity 广播）。
     //   XboxProvider              —— XInput / RawGameController 手柄。
     //   AulaHidProvider           —— AULA 等 2.4G 接收器（HID Output/Input Report）。
+    //   RazerHidProvider          —— Razer 鼠标 / 键盘的 HID 电量读取。
     //   VgnHidProvider            —— VGN / 关联品牌 2.4G 接收器键盘 / 鼠标，
     //                                按协议族分派（ThreeMode / Weisheng / Beiying /
     //                                VgnRyMouse / Yongjiaxin / VgnLdMs / Arbit / VgnKc2）。
@@ -144,10 +241,16 @@ int main(int argc, char *argv[])
     manager.addProvider(std::make_unique<AirPodsProvider>());
     manager.addProvider(std::make_unique<XboxProvider>());
     manager.addProvider(std::make_unique<AulaHidProvider>());
+    manager.addProvider(std::make_unique<RazerHidProvider>());
     manager.addProvider(std::make_unique<VgnHidProvider>());
     manager.start();
 
     MainWindow w(&manager);
+#ifdef Q_OS_WIN
+    ShowMainWindowEventFilter showMainWindowEventFilter(&w, singleInstance.showMainWindowMessage());
+    a.installNativeEventFilter(&showMainWindowEventFilter);
+#endif
+
     // --minimized：开机自启时由注册表命令行追加，让程序静默进入托盘，
     // 不弹主窗口。普通双击启动不带这个参数，正常显示窗口。
     const bool startMinimized = QCoreApplication::arguments()
