@@ -70,6 +70,9 @@ struct BatteryDevice
     int casePercent = -1;
     // 任一路正在充电即置 true（仅 AirPods 路径填写）。
     bool charging = false;
+    // AirPods / Beats 广播是否能对应到本机已配对蓝牙地址。
+    // 普通设备默认 true；只有 AirPods provider 会填 false。
+    bool paired = true;
 
     // 是否接有线电源（Xbox 接有线时无电池）。
     bool wired = false;

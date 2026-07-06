@@ -14,6 +14,8 @@
 //   - Theme           : QString "system" / "light" / "dark"，默认 "system"。
 //   - StaleRetentionSec : int 秒，默认 180（3 分钟）。设备单轮读不到时，
 //                         沿用上次读数继续展示的保留窗口；0 = 从不缓存。
+//   - HideUnpairedAirPods : bool，默认 true。隐藏 BLE 广播中未与本机配对的
+//                           AirPods / Beats。
 //
 // 开机自启单独说明：它直接读写 Windows 注册表的 HKCU\...\Run，
 // 不进 QSettings。读取时也会兼容 Windows 任务管理器写入的
@@ -40,6 +42,11 @@ public:
     // 0 = 从不缓存（瞬时失败即移除，等价旧行为）。
     static int staleRetentionSec();
     static void setStaleRetentionSec(int sec);
+
+    // —— AirPods / Beats 广播过滤 ——
+    // true = 只显示与本机已配对的 Apple 音频设备；false = 显示附近所有可解析广播。
+    static bool hideUnpairedAirPods();
+    static void setHideUnpairedAirPods(bool hide);
 
     // —— 开机自启 ——
     // 读取当前注册表中是否已配置开机自启。

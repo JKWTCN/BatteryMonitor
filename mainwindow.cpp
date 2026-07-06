@@ -644,6 +644,7 @@ void MainWindow::setupPages()
     m_themeRowTitle = new QLabel(tr("Theme"));
     m_startupRowTitle = new QLabel(tr("Start with Windows"));
     m_staleRetentionRowTitle = new QLabel(tr("Stale retention"));
+    m_hideUnpairedAirPodsRowTitle = new QLabel(tr("Hide unpaired AirPods"));
     m_versionRowTitle = new QLabel(tr("Version"));
     m_versionValue = makeValueLabel();
     m_versionValue->setText(QCoreApplication::applicationVersion());
@@ -663,10 +664,13 @@ void MainWindow::setupPages()
     m_staleRetentionCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_startupCheck = new QCheckBox();
     m_startupCheck->setObjectName(QStringLiteral("startupCheck"));
+    m_hideUnpairedAirPodsCheck = new QCheckBox();
+    m_hideUnpairedAirPodsCheck->setObjectName(QStringLiteral("hideUnpairedAirPodsCheck"));
     addInfoRow(settingsGroupLayout, m_intervalRowTitle, m_intervalCombo);
     addInfoRow(settingsGroupLayout, m_languageRowTitle, m_languageCombo);
     addInfoRow(settingsGroupLayout, m_themeRowTitle, m_themeCombo);
     addInfoRow(settingsGroupLayout, m_staleRetentionRowTitle, m_staleRetentionCombo);
+    addInfoRow(settingsGroupLayout, m_hideUnpairedAirPodsRowTitle, m_hideUnpairedAirPodsCheck);
     addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
     addInfoRow(settingsGroupLayout, m_versionRowTitle, m_versionValue);
     addInfoRow(settingsGroupLayout, m_projectRowTitle, m_projectLinkValue);
@@ -786,6 +790,8 @@ void MainWindow::setupConnections()
             this, &MainWindow::onThemeChanged);
     connect(m_staleRetentionCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &MainWindow::onStaleRetentionChanged);
+    connect(m_hideUnpairedAirPodsCheck, &QCheckBox::toggled,
+            this, &MainWindow::onHideUnpairedAirPodsChanged);
     connect(m_startupCheck, &QCheckBox::toggled,
             this, &MainWindow::onStartupToggled);
     connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
@@ -892,6 +898,14 @@ void MainWindow::onStaleRetentionChanged(int index)
     AppSettings::setStaleRetentionSec(sec);
     if (m_manager) {
         m_manager->setStaleRetention(sec);
+    }
+}
+
+void MainWindow::onHideUnpairedAirPodsChanged(bool checked)
+{
+    AppSettings::setHideUnpairedAirPods(checked);
+    if (m_manager) {
+        m_manager->refreshNow();
     }
 }
 
@@ -1137,6 +1151,7 @@ void MainWindow::loadSettingsIntoUi()
     const QSignalBlocker b3(m_themeCombo);
     const QSignalBlocker b4(m_startupCheck);
     const QSignalBlocker b5(m_staleRetentionCombo);
+    const QSignalBlocker b6(m_hideUnpairedAirPodsCheck);
 
     m_intervalCombo->setCurrentIndex(intervalIndex(AppSettings::refreshInterval()));
 
@@ -1154,6 +1169,7 @@ void MainWindow::loadSettingsIntoUi()
 
     m_staleRetentionCombo->setCurrentIndex(
         staleRetentionIndex(AppSettings::staleRetentionSec()));
+    m_hideUnpairedAirPodsCheck->setChecked(AppSettings::hideUnpairedAirPods());
 
     // 自启状态直接读注册表，与任务管理器显示保持一致。
     m_startupCheck->setChecked(AppSettings::startupAutoStart());
@@ -1225,6 +1241,7 @@ void MainWindow::retranslateUi()
     if (m_themeRowTitle) m_themeRowTitle->setText(tr("Theme"));
     if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
     if (m_staleRetentionRowTitle) m_staleRetentionRowTitle->setText(tr("Stale retention"));
+    if (m_hideUnpairedAirPodsRowTitle) m_hideUnpairedAirPodsRowTitle->setText(tr("Hide unpaired AirPods"));
     if (m_versionRowTitle) m_versionRowTitle->setText(tr("Version"));
     if (m_versionValue) m_versionValue->setText(QCoreApplication::applicationVersion());
     if (m_projectRowTitle) m_projectRowTitle->setText(tr("Project"));

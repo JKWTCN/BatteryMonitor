@@ -1,6 +1,8 @@
 #include "AirPodsProvider.h"
 #include "util/Logger.h"
 
+#include <winrt/Windows.Devices.Bluetooth.h>
+#include <winrt/Windows.Devices.Enumeration.h>
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Storage.Streams.h>
 
@@ -9,8 +11,11 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <set>
 #include <vector>
 
+namespace WDB = winrt::Windows::Devices::Bluetooth;
+namespace WDE = winrt::Windows::Devices::Enumeration;
 using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 
 namespace
@@ -136,6 +141,85 @@ namespace
 
     // 最近广播有效期。超过此时长未见广播的设备从快照中剔除。
     constexpr auto kStaleTimeout = std::chrono::seconds(35);
+
+    struct PairedAddressSnapshot
+    {
+        bool available = false;
+        std::set<uint64_t> addresses;
+    };
+
+    void collectPairedLeAddresses(PairedAddressSnapshot &snapshot)
+    {
+        const auto found = WDE::DeviceInformation::FindAllAsync(
+            WDB::BluetoothLEDevice::GetDeviceSelectorFromPairingState(true)).get();
+        snapshot.available = true;
+        for (const auto &info : found)
+        {
+            try
+            {
+                const auto device = WDB::BluetoothLEDevice::FromIdAsync(info.Id()).get();
+                if (device)
+                {
+                    snapshot.addresses.insert(device.BluetoothAddress());
+                }
+            }
+            catch (...)
+            {
+            }
+        }
+    }
+
+    void collectPairedClassicAddresses(PairedAddressSnapshot &snapshot)
+    {
+        const auto found = WDE::DeviceInformation::FindAllAsync(
+            WDB::BluetoothDevice::GetDeviceSelectorFromPairingState(true)).get();
+        snapshot.available = true;
+        for (const auto &info : found)
+        {
+            try
+            {
+                const auto device = WDB::BluetoothDevice::FromIdAsync(info.Id()).get();
+                if (device)
+                {
+                    snapshot.addresses.insert(device.BluetoothAddress());
+                }
+            }
+            catch (...)
+            {
+            }
+        }
+    }
+
+    PairedAddressSnapshot collectPairedBluetoothAddresses()
+    {
+        PairedAddressSnapshot snapshot;
+        try
+        {
+            collectPairedLeAddresses(snapshot);
+        }
+        catch (const winrt::hresult_error &e)
+        {
+            LOG_VERBOSE_W(L"[AirPods] paired LE enum failed: " + std::wstring(e.message()));
+        }
+        catch (...)
+        {
+            LOG_VERBOSE("[AirPods] paired LE enum failed");
+        }
+
+        try
+        {
+            collectPairedClassicAddresses(snapshot);
+        }
+        catch (const winrt::hresult_error &e)
+        {
+            LOG_VERBOSE_W(L"[AirPods] paired classic enum failed: " + std::wstring(e.message()));
+        }
+        catch (...)
+        {
+            LOG_VERBOSE("[AirPods] paired classic enum failed");
+        }
+        return snapshot;
+    }
 } // namespace
 
 AirPodsProvider::AirPodsProvider() = default;
@@ -310,6 +394,7 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
 
     std::vector<BatteryDevice> devices;
     const auto now = std::chrono::steady_clock::now();
+    const PairedAddressSnapshot pairedAddresses = collectPairedBluetoothAddresses();
 
     // 清理过期 + 构建快照。
     std::vector<std::pair<uint64_t, AdvDevice>> snapshot;
@@ -332,6 +417,9 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
 
     for (const auto &[addr, adv] : snapshot)
     {
+        const bool paired = !pairedAddresses.available ||
+            pairedAddresses.addresses.find(addr) != pairedAddresses.addresses.end();
+
         BatteryDevice device;
         device.id = L"airpods:" + std::to_wstring(addr);
         device.name = adv.name;
@@ -341,6 +429,7 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
         device.rightPercent = adv.rightPercent;
         device.casePercent = adv.casePercent;
         device.charging = adv.charging;
+        device.paired = paired;
         // 百分比取三路有效值的最低，用于排序 / 低电量提醒 / 整体进度条。
         int minPct = -1;
         for (int v : {adv.leftPercent, adv.rightPercent, adv.casePercent})

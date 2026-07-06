@@ -66,6 +66,8 @@ private slots:
     void onStartupToggled(bool checked);
     // 设置页「缓存保留时长」下拉框被切换。
     void onStaleRetentionChanged(int index);
+    // 设置页「隐藏未配对 AirPods」复选框被切换。
+    void onHideUnpairedAirPodsChanged(bool checked);
     void onTrayActivated();
     void onToggleVisible();
     void onQuit();
@@ -159,6 +161,7 @@ private:
     QLabel *m_themeRowTitle = nullptr;
     QLabel *m_startupRowTitle = nullptr;
     QLabel *m_staleRetentionRowTitle = nullptr;
+    QLabel *m_hideUnpairedAirPodsRowTitle = nullptr;
     QLabel *m_versionRowTitle = nullptr;
     QLabel *m_versionValue = nullptr;
     QLabel *m_projectRowTitle = nullptr;
@@ -168,6 +171,7 @@ private:
     QComboBox *m_themeCombo = nullptr;
     QComboBox *m_staleRetentionCombo = nullptr;
     QCheckBox *m_startupCheck = nullptr;
+    QCheckBox *m_hideUnpairedAirPodsCheck = nullptr;
 
     QList<BatteryDevice> m_devices;
     QString m_currentDetailId;

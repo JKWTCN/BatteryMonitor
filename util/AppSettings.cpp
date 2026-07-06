@@ -16,11 +16,13 @@ constexpr auto kKeyRefreshInterval = "RefreshInterval";
 constexpr auto kKeyLanguage = "Language";
 constexpr auto kKeyTheme = "Theme";
 constexpr auto kKeyStaleRetentionSec = "StaleRetentionSec";
+constexpr auto kKeyHideUnpairedAirPods = "HideUnpairedAirPods";
 
 constexpr int kDefaultRefreshInterval = 10000;
 const QString kDefaultLanguage = QString();      // 空 = 跟随系统
 const QString kDefaultTheme = QStringLiteral("system");
 constexpr int kDefaultStaleRetentionSec = 180;   // 3 分钟
+constexpr bool kDefaultHideUnpairedAirPods = true;
 } // namespace
 
 int AppSettings::refreshInterval()
@@ -61,6 +63,17 @@ int AppSettings::staleRetentionSec()
 void AppSettings::setStaleRetentionSec(int sec)
 {
     QSettings().setValue(kKeyStaleRetentionSec, sec);
+}
+
+bool AppSettings::hideUnpairedAirPods()
+{
+    return QSettings().value(kKeyHideUnpairedAirPods,
+                             kDefaultHideUnpairedAirPods).toBool();
+}
+
+void AppSettings::setHideUnpairedAirPods(bool hide)
+{
+    QSettings().setValue(kKeyHideUnpairedAirPods, hide);
 }
 
 // —— 开机自启 ——

@@ -13,12 +13,29 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <cwctype>
 #include <set>
 #include <sstream>
 #include <utility>
 
 namespace
 {
+std::wstring lowerCopy(std::wstring value)
+{
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+    return value;
+}
+
+bool looksLikeAppleAudioName(const std::wstring &name)
+{
+    const std::wstring lower = lowerCopy(name);
+    return lower.find(L"airpods") != std::wstring::npos ||
+           lower.find(L"airpod") != std::wstring::npos ||
+           lower.find(L"beats") != std::wstring::npos ||
+           lower.find(L"powerbeats") != std::wstring::npos;
+}
+
 // worker 线程实际对象：在自身线程内初始化并执行刷新。
 // 之所以不直接用 QThread::run()，是因为我们需要事件循环来接收
 // 主线程投递过来的 queued 调用（refresh()）。
@@ -75,6 +92,8 @@ public slots:
             }
         }
 
+        filterUnpairedAirPods(raw);
+
         // 与粘性缓存合并：本轮读到的设备刷新时间戳并入缓存；本轮没读到的
         // 设备若还在保留窗口内，以 stale=true 沿用旧值补回。详见 applyStickyCache。
         applyStickyCache(raw);
@@ -115,6 +134,11 @@ private:
     // m_staleRetentionMsec==0 时跳过整个合并（等价于「从不缓存」旧行为）。
     void applyStickyCache(std::vector<BatteryDevice> &raw);
 
+    // AirPods 展示过滤必须在所有 provider 聚合后做：
+    // 普通蓝牙 provider 可能先给出一个已连接但电量未知的 AirPods 记录，
+    // AirPodsProvider 再给出三路电量广播记录；后者需要借前者兜底证明“本机已配对”。
+    void filterUnpairedAirPods(std::vector<BatteryDevice> &raw);
+
     std::vector<IBatteryProvider *> m_providers;
 
     // 上一轮的设备签名集合（已排序），用于变化检测。
@@ -147,6 +171,7 @@ std::wstring RefreshWorker::deviceSignature(const BatteryDevice &d)
        << d.rightPercent << L'|'
        << d.casePercent << L'|'
        << (d.charging ? 1 : 0) << L'|'
+       << (d.paired ? 1 : 0) << L'|'
        << (d.wired ? 1 : 0) << L'|'
        << (d.connected ? 1 : 0) << L'|'
        << (d.stale ? 1 : 0);
@@ -232,6 +257,12 @@ void RefreshWorker::applyStickyCache(std::vector<BatteryDevice> &raw)
             ++it;
             continue;
         }
+        if (AppSettings::hideUnpairedAirPods()
+            && it.value().subType == BatteryDevice::SubType::AirPods
+            && !it.value().paired) {
+            it = m_cache.erase(it);
+            continue;
+        }
         const quint64 age = static_cast<quint64>(now - it.value().lastSeenMsecs);
         const bool keepForever = DeviceSettings::keepCachedForever(
             QString::fromStdWString(it.key()));
@@ -250,6 +281,71 @@ void RefreshWorker::applyStickyCache(std::vector<BatteryDevice> &raw)
     raw.insert(raw.end(),
                std::make_move_iterator(staleRevived.begin()),
                std::make_move_iterator(staleRevived.end()));
+}
+
+void RefreshWorker::filterUnpairedAirPods(std::vector<BatteryDevice> &raw)
+{
+    int unpairedAirPodsCount = 0;
+    int airPodsBroadcastCount = 0;
+    bool hasConnectedAppleAudioPlaceholder = false;
+    for (const auto &d : raw) {
+        if (d.subType == BatteryDevice::SubType::AirPods) {
+            ++airPodsBroadcastCount;
+            if (!d.paired) {
+                ++unpairedAirPodsCount;
+            }
+        }
+        if (d.subType == BatteryDevice::SubType::Generic &&
+            d.type == BatteryDevice::Type::Bluetooth &&
+            d.connected &&
+            looksLikeAppleAudioName(d.name)) {
+            hasConnectedAppleAudioPlaceholder = true;
+        }
+    }
+
+    // 如果广播地址和 Windows 配对地址对不上，但当前只有一个 AirPods 广播，
+    // 且系统里已有一个已连接的 AirPods/Beats 蓝牙记录，则把它视为本机设备。
+    const bool allowSingleByConnectedPlaceholder =
+        AppSettings::hideUnpairedAirPods() &&
+        airPodsBroadcastCount == 1 &&
+        unpairedAirPodsCount == 1 &&
+        hasConnectedAppleAudioPlaceholder;
+
+    raw.erase(std::remove_if(raw.begin(), raw.end(),
+        [allowSingleByConnectedPlaceholder](BatteryDevice &d) {
+            if (d.subType != BatteryDevice::SubType::AirPods) {
+                return false;
+            }
+            // BLE 广播没提供任何一路有效电量时，不展示未知电量行。
+            // 如果缓存里有上一轮有效值，applyStickyCache() 会在后面补回。
+            if (d.percentage < 0) {
+                LOG_VERBOSE_W(L"[BatteryManager] hide AirPods broadcast without battery: " + d.name);
+                return true;
+            }
+            if (d.paired || !AppSettings::hideUnpairedAirPods()) {
+                return false;
+            }
+            if (allowSingleByConnectedPlaceholder) {
+                d.paired = true;
+                return false;
+            }
+            LOG_VERBOSE_W(L"[BatteryManager] hide unpaired AirPods broadcast: " + d.name);
+            return true;
+        }), raw.end());
+
+    // 隐藏普通 BluetoothProvider/ClassicBluetoothProvider 产生的
+    // “已连接但电量未知”AirPods 占位项。它只用于上面的匹配兜底，不进入 UI。
+    // 如果曾经收到过有效 AirPods 广播，applyStickyCache() 会补回最后一次有效电量；
+    // 如果从未收到过，就不显示 AirPods 电量行。
+    raw.erase(std::remove_if(raw.begin(), raw.end(),
+        [](const BatteryDevice &d) {
+            return d.subType == BatteryDevice::SubType::Generic &&
+                   d.type == BatteryDevice::Type::Bluetooth &&
+                   d.connected &&
+                   d.percentage < 0 &&
+                   d.level == BatteryLevel::Unknown &&
+                   looksLikeAppleAudioName(d.name);
+        }), raw.end());
 }
 
 #include "BatteryManager.moc"

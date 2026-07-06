@@ -387,5 +387,9 @@
         <source>Keep cached</source>
         <translation>永久缓存</translation>
     </message>
+    <message>
+        <source>Hide unpaired AirPods</source>
+        <translation>隐藏未配对的 AirPods</translation>
+    </message>
 </context>
 </TS>

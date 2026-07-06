@@ -46,6 +46,7 @@ private:
         int rightPercent = -1;
         int casePercent = -1;
         bool charging = false;
+        bool paired = false;
         short rssi = 0;
         std::chrono::steady_clock::time_point lastSeen; // 最近一次收到广播的时间
     };
