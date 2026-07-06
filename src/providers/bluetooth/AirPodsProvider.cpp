@@ -79,65 +79,62 @@ namespace
     const std::map<uint16_t, std::wstring> &modelTable()
     {
         static const std::map<uint16_t, std::wstring> kTable = {
-            static const std::unordered_map<uint16_t, std::wstring_view> kAppleProximityModels =
-                {
-                    // AirPods
-                    {0x0220, L"AirPods (1st generation)"},
-                    {0x0F20, L"AirPods (2nd generation)"},
-                    {0x1320, L"AirPods (3rd generation)"},
-                    {0x1920, L"AirPods (4th generation)"},
-                    {0x1B20, L"AirPods (4th generation, ANC)"},
+            // AirPods
+            {0x0220, L"AirPods (1st generation)"},
+            {0x0F20, L"AirPods (2nd generation)"},
+            {0x1320, L"AirPods (3rd generation)"},
+            {0x1920, L"AirPods (4th generation)"},
+            {0x1B20, L"AirPods (4th generation, ANC)"},
 
-                    {0x0E20, L"AirPods Pro (1st generation)"},
-                    {0x1420, L"AirPods Pro (2nd generation)"},
-                    {0x2420, L"AirPods Pro (2nd generation, USB-C)"},
-                    {0x2720, L"AirPods Pro 3"},
+            {0x0E20, L"AirPods Pro (1st generation)"},
+            {0x1420, L"AirPods Pro (2nd generation)"},
+            {0x2420, L"AirPods Pro (2nd generation, USB-C)"},
+            {0x2720, L"AirPods Pro 3"},
 
-                    {0x0A20, L"AirPods Max"},
-                    {0x1F20, L"AirPods Max (USB-C)"},
-                    {0x2D20, L"AirPods Max 2"},
+            {0x0A20, L"AirPods Max"},
+            {0x1F20, L"AirPods Max (USB-C)"},
+            {0x2D20, L"AirPods Max 2"},
 
-                    // Beats
-                    {0x0520, L"BeatsX"},
-                    {0x1020, L"Beats Flex"},
+            // Beats
+            {0x0520, L"BeatsX"},
+            {0x1020, L"Beats Flex"},
 
-                    {0x0620, L"Beats Solo 3"},
-                    {0x0C20, L"Beats Solo Pro"},
-                    {0x2520, L"Beats Solo 4"},
-                    {0x2620, L"Beats Solo Buds"},
+            {0x0620, L"Beats Solo 3"},
+            {0x0C20, L"Beats Solo Pro"},
+            {0x2520, L"Beats Solo 4"},
+            {0x2620, L"Beats Solo Buds"},
 
-                    {0x0920, L"Beats Studio 3"},
-                    {0x1120, L"Beats Studio Buds"},
-                    {0x1620, L"Beats Studio Buds+"},
-                    {0x1720, L"Beats Studio Pro"},
+            {0x0920, L"Beats Studio 3"},
+            {0x1120, L"Beats Studio Buds"},
+            {0x1620, L"Beats Studio Buds+"},
+            {0x1720, L"Beats Studio Pro"},
 
-                    {0x0320, L"Powerbeats 3"},
-                    {0x0D20, L"Powerbeats 4"},
-                    {0x0B20, L"Powerbeats Pro"},
-                    {0x1D20, L"Powerbeats Pro 2"},
+            {0x0320, L"Powerbeats 3"},
+            {0x0D20, L"Powerbeats 4"},
+            {0x0B20, L"Powerbeats Pro"},
+            {0x1D20, L"Powerbeats Pro 2"},
 
-                    {0x1220, L"Beats Fit Pro"},
-                };
-    };
-    return kTable;
-}
-
-// 查型号友好名，未命中返回 L"Apple Audio (ID:XXXX)"。
-std::wstring modelDisplayName(uint16_t modelId)
-{
-    const auto &table = modelTable();
-    const auto it = table.find(modelId);
-    if (it != table.end())
-    {
-        return it->second;
+            {0x1220, L"Beats Fit Pro"},
+        };
+        return kTable;
     }
-    wchar_t buf[64] = {};
-    swprintf(buf, 64, L"Apple Audio (ID:%04X)", modelId);
-    return buf;
-}
 
-// 最近广播有效期。超过此时长未见广播的设备从快照中剔除。
-constexpr auto kStaleTimeout = std::chrono::seconds(35);
+    // 查型号友好名，未命中返回 L"Apple Audio (ID:XXXX)"。
+    std::wstring modelDisplayName(uint16_t modelId)
+    {
+        const auto &table = modelTable();
+        const auto it = table.find(modelId);
+        if (it != table.end())
+        {
+            return it->second;
+        }
+        wchar_t buf[64] = {};
+        swprintf(buf, 64, L"Apple Audio (ID:%04X)", modelId);
+        return buf;
+    }
+
+    // 最近广播有效期。超过此时长未见广播的设备从快照中剔除。
+    constexpr auto kStaleTimeout = std::chrono::seconds(35);
 } // namespace
 
 AirPodsProvider::AirPodsProvider() = default;
