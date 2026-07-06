@@ -30,6 +30,8 @@ enum class AlertPolicy
 //   - LowBatteryAlert     : bool，默认 true。是否对该设备做低电量提醒。
 //   - LowBatteryThreshold : int 1..100，默认 20。触发提醒的电量百分比上限。
 //   - LowBatteryPolicy    : QString，默认 "once"。见 AlertPolicy 枚举。
+//   - KeepCachedForever   : bool，默认 false。是否在掉线后永久以 stale 值
+//                           保留在列表里（不受全局“粘性缓存保留时长”约束）。
 //
 // 注：早期版本没有 LowBatteryAlert 键，那时阈值 = 0 表示“关闭”。
 // 为了让老用户升级后行为一致，alertEnabled() 在键缺失时回退到
@@ -65,11 +67,18 @@ public:
     static QString policyToString(AlertPolicy policy);
     static AlertPolicy stringToPolicy(const QString &value);
 
+    // —— 是否对该设备启用“永久缓存”——
+    // 勾选后，该设备即便持续读不到，也会一直以 stale 值留在设备列表里，
+    // 不受全局“粘性缓存保留时长”（StaleRetention）的超时清理约束。
+    static bool keepCachedForever(const QString &deviceId);
+    static void setKeepCachedForever(const QString &deviceId, bool keep);
+
     // 默认值常量，供 UI 回填与判断时引用。
     static constexpr bool kDefaultTrayVisible = true;
     static constexpr bool kDefaultAlertEnabled = true;
     static constexpr int kDefaultLowBatteryThreshold = 20;
     static constexpr AlertPolicy kDefaultAlertPolicy = AlertPolicy::Once;
+    static constexpr bool kDefaultKeepCachedForever = false;
     static constexpr int kMaxThreshold = 100;
 
 private:

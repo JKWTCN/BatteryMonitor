@@ -13,6 +13,7 @@ constexpr auto kKeyTrayVisible = "TrayVisible";
 constexpr auto kKeyAlertEnabled = "LowBatteryAlert";
 constexpr auto kKeyLowBatteryThreshold = "LowBatteryThreshold";
 constexpr auto kKeyLowBatteryPolicy = "LowBatteryPolicy";
+constexpr auto kKeyKeepCachedForever = "KeepCachedForever";
 
 // 持久化用的策略字符串。改动这些常量会破坏老设置，需谨慎。
 constexpr auto kPolicyStrOnce = "once";
@@ -186,4 +187,22 @@ AlertPolicy DeviceSettings::stringToPolicy(const QString &value)
     if (value == kPolicyStr60Min)      return AlertPolicy::Every60Min;
     if (value == kPolicyStrOnce)       return AlertPolicy::Once;
     return kDefaultAlertPolicy; // 未知字符串（含空串）-> 默认。
+}
+
+bool DeviceSettings::keepCachedForever(const QString &deviceId)
+{
+    if (deviceId.isEmpty()) {
+        return kDefaultKeepCachedForever;
+    }
+    QSettings s;
+    return s.value(prefixFor(deviceId) + kKeyKeepCachedForever,
+                   kDefaultKeepCachedForever).toBool();
+}
+
+void DeviceSettings::setKeepCachedForever(const QString &deviceId, bool keep)
+{
+    if (deviceId.isEmpty()) {
+        return;
+    }
+    QSettings().setValue(prefixFor(deviceId) + kKeyKeepCachedForever, keep);
 }

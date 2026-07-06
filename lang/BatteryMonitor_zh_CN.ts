@@ -381,5 +381,11 @@
         <source>%1 (%2)</source>
         <translation>%1（%2）</translation>
     </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="558"/>
+        <location filename="../mainwindow.cpp" line="1230"/>
+        <source>Keep cached</source>
+        <translation>永久缓存</translation>
+    </message>
 </context>
 </TS>

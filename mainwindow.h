@@ -79,6 +79,8 @@ private slots:
     void onDeviceAlertPolicyChanged(int index);
     // 设备信息页“别名”输入框编辑完成。
     void onDeviceAliasEditingFinished();
+    // 设备信息页“永久缓存”复选框被切换。
+    void onDeviceKeepCacheChanged(bool checked);
 
 private:
     void setupPages();
@@ -139,11 +141,13 @@ private:
     QLabel *m_deviceTrayRowTitle = nullptr;
     QLabel *m_deviceThresholdRowTitle = nullptr;
     QLabel *m_deviceAlertPolicyRowTitle = nullptr;
+    QLabel *m_deviceKeepCacheRowTitle = nullptr;
     QLineEdit *m_deviceAliasEdit = nullptr;
     QCheckBox *m_deviceTrayCheck = nullptr;
     QCheckBox *m_deviceAlertCheck = nullptr;
     QSpinBox *m_deviceThresholdSpin = nullptr;
     QComboBox *m_deviceAlertPolicyCombo = nullptr;
+    QCheckBox *m_deviceKeepCacheCheck = nullptr;
 
     // —— 设置页控件 ——
     QPushButton *m_refreshButton = nullptr;

@@ -555,6 +555,7 @@ void MainWindow::setupPages()
     m_deviceTrayRowTitle = new QLabel(tr("Show in tray"));
     m_deviceThresholdRowTitle = new QLabel(tr("Low battery alert"));
     m_deviceAlertPolicyRowTitle = new QLabel(tr("Repeat"));
+    m_deviceKeepCacheRowTitle = new QLabel(tr("Keep cached"));
     m_deviceAliasEdit = new QLineEdit();
     m_deviceAliasEdit->setObjectName(QStringLiteral("deviceAliasEdit"));
     m_deviceAliasEdit->setClearButtonEnabled(true);
@@ -562,6 +563,8 @@ void MainWindow::setupPages()
     m_deviceTrayCheck->setObjectName(QStringLiteral("deviceTrayCheck"));
     m_deviceAlertCheck = new QCheckBox();
     m_deviceAlertCheck->setObjectName(QStringLiteral("deviceAlertCheck"));
+    m_deviceKeepCacheCheck = new QCheckBox();
+    m_deviceKeepCacheCheck->setObjectName(QStringLiteral("deviceKeepCacheCheck"));
     m_deviceThresholdSpin = new QSpinBox();
     m_deviceThresholdSpin->setObjectName(QStringLiteral("deviceThresholdSpin"));
     // 阈值范围 1..100：启用 / 关闭由独立的 m_deviceAlertCheck 控制，
@@ -598,6 +601,7 @@ void MainWindow::setupPages()
     addInfoRow(deviceSettingsLayout, m_deviceTrayRowTitle, m_deviceTrayCheck);
     addInfoRow(deviceSettingsLayout, m_deviceThresholdRowTitle, alertValueWidget);
     addInfoRow(deviceSettingsLayout, m_deviceAlertPolicyRowTitle, m_deviceAlertPolicyCombo);
+    addInfoRow(deviceSettingsLayout, m_deviceKeepCacheRowTitle, m_deviceKeepCacheCheck);
     detailLayout->addWidget(m_deviceSettingsGroup);
     detailLayout->addStretch(1);
 
@@ -800,6 +804,8 @@ void MainWindow::setupConnections()
             this, &MainWindow::onDeviceAlertPolicyChanged);
     connect(m_deviceAliasEdit, &QLineEdit::editingFinished,
             this, &MainWindow::onDeviceAliasEditingFinished);
+    connect(m_deviceKeepCacheCheck, &QCheckBox::toggled,
+            this, &MainWindow::onDeviceKeepCacheChanged);
 
     connect(m_tray, &QSystemTrayIcon::activated,
             this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -998,6 +1004,16 @@ void MainWindow::onDeviceAliasEditingFinished()
     rebuildTable(m_devices);
     refreshDetailPage();
     updateTray(m_devices);
+}
+
+void MainWindow::onDeviceKeepCacheChanged(bool checked)
+{
+    if (m_currentDetailId.isEmpty()) {
+        return;
+    }
+    DeviceSettings::setKeepCachedForever(m_currentDetailId, checked);
+    // 设置本身只影响下一轮合并时的过期判定，无需立即改动 UI；
+    // 现存设备（无论在线还是已 stale）显示不变。
 }
 
 void MainWindow::showTrayHintOnce()
@@ -1226,6 +1242,7 @@ void MainWindow::retranslateUi()
     if (m_deviceTrayRowTitle) m_deviceTrayRowTitle->setText(tr("Show in tray"));
     if (m_deviceThresholdRowTitle) m_deviceThresholdRowTitle->setText(tr("Low battery alert"));
     if (m_deviceAlertPolicyRowTitle) m_deviceAlertPolicyRowTitle->setText(tr("Repeat"));
+    if (m_deviceKeepCacheRowTitle) m_deviceKeepCacheRowTitle->setText(tr("Keep cached"));
     // 策略下拉框的条目文本需重译，但保留当前选中项与各 item 的 userData(策略枚举)。
     if (m_deviceAlertPolicyCombo) {
         const int cur = m_deviceAlertPolicyCombo->currentIndex();
@@ -1291,12 +1308,13 @@ void MainWindow::refreshDetailPage()
 
     // —— 回填设备级设置（屏蔽信号，避免回调写盘）——
     if (m_deviceAliasEdit && m_deviceTrayCheck && m_deviceAlertCheck && m_deviceThresholdSpin &&
-        m_deviceAlertPolicyCombo) {
+        m_deviceAlertPolicyCombo && m_deviceKeepCacheCheck) {
         const QSignalBlocker b0(m_deviceAliasEdit);
         const QSignalBlocker b1(m_deviceTrayCheck);
         const QSignalBlocker b2(m_deviceAlertCheck);
         const QSignalBlocker b3(m_deviceThresholdSpin);
         const QSignalBlocker b4(m_deviceAlertPolicyCombo);
+        const QSignalBlocker b5(m_deviceKeepCacheCheck);
         m_deviceAliasEdit->setText(DeviceSettings::alias(id));
         m_deviceAliasEdit->setPlaceholderText(name.isEmpty() ? tr("Unknown device") : name);
         m_deviceTrayCheck->setChecked(DeviceSettings::trayVisible(id));
@@ -1316,6 +1334,7 @@ void MainWindow::refreshDetailPage()
             }
         }
         m_deviceAlertPolicyCombo->setCurrentIndex(policyIndex);
+        m_deviceKeepCacheCheck->setChecked(DeviceSettings::keepCachedForever(id));
     }
 }
 

@@ -1,5 +1,6 @@
 #include "BatteryManager.h"
 #include "util/AppSettings.h"
+#include "util/DeviceSettings.h"
 #include "util/Logger.h"
 
 #include <QDateTime>
@@ -8,6 +9,7 @@
 #include <QMutex>
 #include <QMutexLocker>
 #include <QSet>
+#include <QString>
 #include <QTimer>
 
 #include <algorithm>
@@ -221,6 +223,9 @@ void RefreshWorker::applyStickyCache(std::vector<BatteryDevice> &raw)
     }
 
     // 2) 缓存里本轮未出现的设备：保留窗口内沿用旧值并标 stale，超时则移除。
+    //    特例：用户对该设备勾选了“永久缓存”时，无视超时窗口，永久以 stale 值保留。
+    //    （注：即便全局粘性缓存被关闭 m_staleRetentionMsec==0，本函数已在最上方早退，
+    //     因此“永久缓存”只在全局开启缓存的前提下生效，避免与用户“从不缓存”的意图冲突。）
     std::vector<BatteryDevice> staleRevived;
     for (auto it = m_cache.begin(); it != m_cache.end();) {
         if (seenIds.contains(it.key())) {
@@ -228,7 +233,9 @@ void RefreshWorker::applyStickyCache(std::vector<BatteryDevice> &raw)
             continue;
         }
         const quint64 age = static_cast<quint64>(now - it.value().lastSeenMsecs);
-        if (age <= m_staleRetentionMsec) {
+        const bool keepForever = DeviceSettings::keepCachedForever(
+            QString::fromStdWString(it.key()));
+        if (age <= m_staleRetentionMsec || keepForever) {
             BatteryDevice revived = it.value();
             revived.stale = true;
             staleRevived.push_back(revived);
