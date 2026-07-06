@@ -4,6 +4,7 @@
 
 #ifdef Q_OS_WIN
 #include <QCoreApplication>
+#include <QDir>
 #include <QStringList>
 #include <windows.h>
 #endif
@@ -83,7 +84,7 @@ constexpr auto kStartupApprovedRunKeyPath =
 // exe 路径含空格时必须用双引号包起来，否则 explorer 解析会失败。
 QString autoStartCommand()
 {
-    const QString exe = QCoreApplication::applicationFilePath();
+    const QString exe = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
     return QStringLiteral("\"%1\" --minimized").arg(exe);
 }
 

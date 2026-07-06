@@ -199,6 +199,7 @@ int main(int argc, char *argv[])
 #ifdef Q_OS_WIN
     SingleInstanceGuard singleInstance;
     if (singleInstance.hasRunningInstance()) {
+        LOG_W(L"BatteryMonitor instance already running; notifying existing instance");
         singleInstance.notifyRunningInstance();
         return 0;
     }
@@ -214,6 +215,8 @@ int main(int argc, char *argv[])
 
     LOG_W(L"BatteryMonitor starting, exe dir: " +
           QCoreApplication::applicationDirPath().toStdWString());
+    LOG_W(L"BatteryMonitor arguments: " +
+          QCoreApplication::arguments().join(QLatin1Char(' ')).toStdWString());
 
     // 翻译器：堆上分配，与 QApplication 同生命周期，便于运行时切换。
     g_translator = new QTranslator(&a);
@@ -255,6 +258,8 @@ int main(int argc, char *argv[])
     // 不弹主窗口。普通双击启动不带这个参数，正常显示窗口。
     const bool startMinimized = QCoreApplication::arguments()
         .contains(QStringLiteral("--minimized"), Qt::CaseInsensitive);
+    LOG_W(std::wstring(L"BatteryMonitor start minimized: ") +
+          (startMinimized ? L"true" : L"false"));
     if (startMinimized) {
         // 不调用 show*()，窗口保持隐藏；托盘图标已由 MainWindow 构造时建立。
         // 首次自启也提示一下用户程序在托盘里（避免“装了找不到”的困惑）。
