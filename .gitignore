@@ -2,6 +2,9 @@
 !src
 !util
 !.gitignore
+!LICENSE
+!README.md
+!README.en.md
 !CMakeLists.txt
 !main.cpp
 !mainwindow.cpp
@@ -13,3 +16,4 @@
 !res/**
 !cmake/
 !cmake/**
+!image
