@@ -25,10 +25,9 @@ namespace
     constexpr uint8_t kAirPodsAdvType = 0x07;
 
     // AirPods Max 系列型号 ID（这类设备的百分比算法与其它不同：+5 偏移）。
-    // 0x2002 = AirPods Max, 0x200F 之外的有线/无线差异。
     bool isMaxModel(uint16_t modelId)
     {
-        return modelId == 0x2002 || modelId == 0x2017; // 0x2017 = 8223 (AirPods Max USB-C)
+        return modelId == 0x200A || modelId == 0x201F || modelId == 0x202D;
     }
 
     // nibble(0-15) -> 百分比：
@@ -75,46 +74,48 @@ namespace
     }
 
     // Apple 音频设备型号表：modelId -> 友好名。
-    // modelId 由 payload[3..4] 解码（data[3] 低字节、data[4] 高字节），值即下表的 key。
+    // modelId 由 payload[3..4] 解码（data[3] 低字节、data[4] 高字节），
+    // 值是 Apple 蓝牙 PID，例如 AirPods 4 ANC = 0x201B。
     const std::map<uint16_t, std::wstring> &modelTable()
     {
         static const std::map<uint16_t, std::wstring> kTable = {
             // AirPods
-            {0x0220, L"AirPods (1st generation)"},
-            {0x0F20, L"AirPods (2nd generation)"},
-            {0x1320, L"AirPods (3rd generation)"},
-            {0x1920, L"AirPods (4th generation)"},
-            {0x1B20, L"AirPods (4th generation, ANC)"},
+            {0x2002, L"AirPods 1"},
+            {0x200F, L"AirPods 2"},
+            {0x2013, L"AirPods 3"},
+            {0x2019, L"AirPods 4"},
+            {0x201B, L"AirPods 4 ANC"},
 
-            {0x0E20, L"AirPods Pro (1st generation)"},
-            {0x1420, L"AirPods Pro (2nd generation)"},
-            {0x2420, L"AirPods Pro (2nd generation, USB-C)"},
-            {0x2720, L"AirPods Pro 3"},
+            {0x200E, L"AirPods Pro 1"},
+            {0x2014, L"AirPods Pro 2"},
+            {0x2024, L"AirPods Pro 2 USB-C"},
+            {0x2027, L"AirPods Pro 3"},
 
-            {0x0A20, L"AirPods Max"},
-            {0x1F20, L"AirPods Max (USB-C)"},
-            {0x2D20, L"AirPods Max 2"},
+            {0x200A, L"AirPods Max"},
+            {0x201F, L"AirPods Max (USB-C)"},
+            {0x202D, L"AirPods Max 2"},
 
             // Beats
-            {0x0520, L"BeatsX"},
-            {0x1020, L"Beats Flex"},
+            {0x2005, L"BeatsX"},
+            {0x2010, L"Beats Flex"},
 
-            {0x0620, L"Beats Solo 3"},
-            {0x0C20, L"Beats Solo Pro"},
-            {0x2520, L"Beats Solo 4"},
-            {0x2620, L"Beats Solo Buds"},
+            {0x2006, L"Beats Solo 3"},
+            {0x200C, L"Beats Solo Pro"},
+            {0x2025, L"Beats Solo 4"},
+            {0x2026, L"Beats Solo Buds"},
 
-            {0x0920, L"Beats Studio 3"},
-            {0x1120, L"Beats Studio Buds"},
-            {0x1620, L"Beats Studio Buds+"},
-            {0x1720, L"Beats Studio Pro"},
+            {0x2007, L"Beats Studio 3"},
+            {0x2009, L"Beats Studio 3"},
+            {0x2011, L"Beats Studio Buds"},
+            {0x2016, L"Beats Studio Buds+"},
+            {0x2017, L"Beats Studio Pro"},
 
-            {0x0320, L"Powerbeats 3"},
-            {0x0D20, L"Powerbeats 4"},
-            {0x0B20, L"Powerbeats Pro"},
-            {0x1D20, L"Powerbeats Pro 2"},
+            {0x2003, L"Powerbeats 3"},
+            {0x200D, L"Powerbeats 4"},
+            {0x200B, L"Powerbeats Pro"},
+            {0x201D, L"Powerbeats Pro 2"},
 
-            {0x1220, L"Beats Fit Pro"},
+            {0x2012, L"Beats Fit Pro"},
         };
         return kTable;
     }
