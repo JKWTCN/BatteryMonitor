@@ -89,6 +89,15 @@
 //
 // 各协议族均与 BatteryManager 的 10s 轮询模型契合：readDevices() 对每个候选接口
 // 主动发一次电量查询并同步读取响应。
+//
+// —— 接口预筛 ——
+// 2.4G 接收器常暴露多个 HID 接口（标准鼠标 / 键盘输入 + vendor-defined 配置接口），
+// 其中多数是纯输入接口（无输出 / Feature 报告），无法承载写入式查询——对这些接口
+// hid_write / hid_send_feature_report 会被 Windows 拒绝（ERROR_INVALID_FUNCTION）。
+// readDevices() 在分族查询前先用 HidD_GetPreparsedData + HidP_GetCaps 读取每个候选
+// 接口的报告描述符长度，跳过既无输出报告也无 Feature 报告的接口，避免每轮对其打开 /
+// 写入 / 报错刷屏；同时把单接口的探测失败日志降为 VERBOSE，仅在每个设备所有可写接口
+// 都失败的汇总处保留 WARN。
 class VgnHidProvider : public IBatteryProvider
 {
 public:
@@ -96,7 +105,10 @@ public:
     std::vector<BatteryDevice> readDevices() override;
 
 private:
-    // 上次查询成功的接口 path，按 (VID<<16)|PID 缓存。
-    // 命中则优先只查该接口；失败/失效回退该设备其余接口的全量遍历，成功后更新。
+    // 上次查询成功的接口 path，按 (VID<<16)|PID 缓存。缓存即「该设备的唯一查询入口」：
+    // 一旦记下可用 path，此后每轮只查这一个接口——即便设备休眠（该接口本轮无响应）也
+    // 不回退去轮询该设备的其余接口，避免休眠期间反复扫全部接口造成的日志噪音与无谓发包。
+    // 只有「无缓存」或「缓存 path 已不在本轮枚举结果里」（拔插 / 换口）时才重新全量
+    // 发现可用接口，发现成功后写回缓存。
     std::unordered_map<std::uint64_t, std::string> m_lastGoodPath;
 };

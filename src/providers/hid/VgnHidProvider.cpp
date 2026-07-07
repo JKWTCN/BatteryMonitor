@@ -12,6 +12,10 @@
 
 #include <hidapi.h>
 
+#include <windows.h>
+#include <hidsdi.h>
+#include <hidpi.h>
+
 namespace
 {
 // —— 协议族枚举 ——
@@ -247,6 +251,17 @@ bool entryMatchesInterface(const VgnDeviceEntry &entry, const hid_device_info *i
 
 // —— HID 读写工具 ——
 //
+// 查询某个设备路径下输出 / 输入 / Feature 报告的数据字节长度（均不含 Report ID 字节）。
+// 通过 SetupAPI 打开设备路径对应的 HID 句柄，再用 HidD_GetPreparsedData + HidP_GetCaps
+// 读取报告描述符里的 Output/Input/FeatureReportByteLength，这是取得真实报告大小的唯一
+// 可靠途径——hidapi 的 hid_device_info 不暴露报告长度字段。
+// 三个 out 参数在失败时均回退到 kDefaultReportDataSize。
+// 返回 false 表示该接口「既无输出报告也无 Feature 报告」（纯输入接口）——这种接口无法
+// 承载任何 VGN 写入式查询（hid_write / hid_send_feature_report 必然被拒，
+// ERROR_INVALID_FUNCTION），调用方应直接跳过，避免无谓的打开 / 写入 / 报错。
+bool queryReportByteLengths(const char *path, size_t &outDataLen,
+                            size_t &inDataLen, size_t &featureDataLen);
+
 // hid_write / hid_send_feature_report 的报文布局：
 //   - 编号报告设备要求首字节为 Report ID，之后才是 data。
 //   - 对 reportId==0 的设备，首字节填 0，之后是 data（编号报告设备的 0 号报告）。
@@ -257,6 +272,10 @@ bool entryMatchesInterface(const VgnDeviceEntry &entry, const hid_device_info *i
 
 // 输入报告读取超时（毫秒）。桌面单线程轮询，统一放宽到 500ms 以兼容响应较慢的接收器。
 constexpr int kReadTimeoutMs = 500;
+
+// 报告数据字节长度的默认回退值（不含 Report ID 字节）。VGN 多数族为 16B/20B/32B/64B，
+// 此值仅在无法从报告描述符读取时兜底；各族的包大小由协议本身决定，不直接用此值构造包。
+constexpr size_t kDefaultReportDataSize = 64;
 
 // 把 unsigned short 格式化为 4 位十六进制 wchar（如 0x3554），用于日志。
 std::wstring toHex4(unsigned short v)
@@ -284,6 +303,60 @@ std::wstring hidErrorString(hid_device *dev)
 {
     const wchar_t *msg = hid_error(dev); // 仅调用一次
     return std::wstring(msg ? msg : L"unknown");
+}
+
+// hidapi 返回的设备路径形如 "\\\\?\\hid#vid_391d&pid_... ..."，可直接用于 CreateFileW
+// 打开（hidapi 内部也是这么做的）。打开后用 HidD_GetPreparsedData 取报告描述符预处理
+// 数据，再 HidP_GetCaps 读出 caps.Output/Input/FeatureReportByteLength。这三个值均已
+// 包含 Report ID 字节，故各减 1 得到纯数据长度；不使用 Report ID 的设备减 1 会偏小，
+// 但各族的包大小由协议本身决定、不依赖此值，偏小仅影响读取缓冲区大小，安全。
+bool queryReportByteLengths(const char *path, size_t &outDataLen,
+                            size_t &inDataLen, size_t &featureDataLen)
+{
+    outDataLen = kDefaultReportDataSize;
+    inDataLen = kDefaultReportDataSize;
+    featureDataLen = kDefaultReportDataSize;
+    if (!path) {
+        return false;
+    }
+
+    const std::wstring wpath(path, path + std::strlen(path));
+    // hidapi 已用共享读方式打开设备；这里仅需读取报告描述符，故以只读 + 共享读写方式打开，
+    // 避免与 hidapi 句柄产生独占冲突。
+    HANDLE h = CreateFileW(wpath.c_str(), GENERIC_READ,
+                           FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                           OPEN_EXISTING, 0, nullptr);
+    if (h == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    PHIDP_PREPARSED_DATA preparsed = nullptr;
+    if (!HidD_GetPreparsedData(h, &preparsed) || !preparsed) {
+        CloseHandle(h);
+        return false;
+    }
+
+    bool usable = false;
+    HIDP_CAPS caps{};
+    if (HidP_GetCaps(preparsed, &caps) == HIDP_STATUS_SUCCESS) {
+        if (caps.OutputReportByteLength > 1) {
+            outDataLen = caps.OutputReportByteLength - 1;
+        }
+        if (caps.InputReportByteLength > 1) {
+            inDataLen = caps.InputReportByteLength - 1;
+        }
+        if (caps.FeatureReportByteLength > 1) {
+            featureDataLen = caps.FeatureReportByteLength - 1;
+        }
+        // 该接口既无输出报告也无 Feature 报告（纯输入接口）时无法承载任何写入式查询，
+        // hid_write / hid_send_feature_report 必然被拒（ERROR_INVALID_FUNCTION）。
+        // 标记为不可用，调用方直接跳过。
+        usable = caps.OutputReportByteLength > 0 || caps.FeatureReportByteLength > 0;
+    }
+
+    HidD_FreePreparsedData(preparsed);
+    CloseHandle(h);
+    return usable;
 }
 
 // 精确百分比 -> 离散档位（与其它 provider 一致）。
@@ -358,14 +431,14 @@ std::optional<std::vector<unsigned char>> featureReportXfer(hid_device *dev,
     req.push_back(reportId);
     req.insert(req.end(), data.begin(), data.end());
     if (hid_send_feature_report(dev, req.data(), req.size()) < 0) {
-        LOG_ERR_W(L"[VGN] hid_send_feature_report failed: " + hidErrorString(dev));
+        LOG_VERBOSE_W(L"[VGN] hid_send_feature_report failed: " + hidErrorString(dev));
         return std::nullopt;
     }
     std::vector<unsigned char> resp(responseSize + 1, 0);
     resp[0] = reportId;
     int n = hid_get_feature_report(dev, resp.data(), resp.size());
     if (n <= 0) {
-        LOG_ERR_W(L"[VGN] hid_get_feature_report failed: " + hidErrorString(dev));
+        LOG_VERBOSE_W(L"[VGN] hid_get_feature_report failed: " + hidErrorString(dev));
         return std::nullopt;
     }
     // 去掉首字节 reportId，返回 payload。
@@ -380,7 +453,7 @@ std::optional<std::vector<unsigned char>> readInputReport(hid_device *dev, size_
     int n = hid_read_timeout(dev, buf.data(), buf.size(), kReadTimeoutMs);
     if (n <= 0) {
         if (n < 0) {
-            LOG_ERR_W(L"[VGN] hid_read_timeout failed: " + hidErrorString(dev));
+            LOG_VERBOSE_W(L"[VGN] hid_read_timeout failed: " + hidErrorString(dev));
         }
         return std::nullopt;
     }
@@ -417,12 +490,12 @@ std::optional<BatteryDevice> queryThreeMode(hid_device *dev, const VgnDeviceEntr
     req[0] = 13; // ThreeMode 命令
     req[1] = 1;  // GetBasicInfo
     if (writeOutputReport(dev, entry.reportId, req) < 0) {
-        LOG_WARN_W(L"[VGN] ThreeMode hid_write failed for " + name);
+        LOG_VERBOSE_W(L"[VGN] ThreeMode hid_write failed for " + name);
         return std::nullopt;
     }
     auto resp = readInputReport(dev, 65);
     if (!resp || resp->size() < 5) {
-        LOG_WARN_W(L"[VGN] ThreeMode no/short response for " + name);
+        LOG_VERBOSE_W(L"[VGN] ThreeMode no/short response for " + name);
         return std::nullopt;
     }
     // Input Report 首字节为 reportId（编号报告设备），从第 1 字节起才是 payload。
@@ -433,7 +506,7 @@ std::optional<BatteryDevice> queryThreeMode(hid_device *dev, const VgnDeviceEntr
         base = 1; // 跳过 reportId
     }
     if (base + 5 > r.size()) {
-        LOG_WARN_W(L"[VGN] ThreeMode payload too short for " + name);
+        LOG_VERBOSE_W(L"[VGN] ThreeMode payload too short for " + name);
         return std::nullopt;
     }
     // getBasicInfo 解析：{mode:e[2], charge:e[3], battery:e[4]}。
@@ -454,7 +527,7 @@ std::optional<BatteryDevice> queryWeisheng(hid_device *dev, const VgnDeviceEntry
     for (int attempt = 0; attempt < 5; ++attempt) {
         std::vector<unsigned char> req = {0, 0, 26, 6, 0, 0, 0}; // GetBatterLevel=26
         if (writeOutputReport(dev, entry.reportId, req) < 0) {
-            LOG_WARN_W(L"[VGN] Weisheng hid_write failed for " + name);
+            LOG_VERBOSE_W(L"[VGN] Weisheng hid_write failed for " + name);
             return std::nullopt;
         }
         auto resp = readInputReport(dev, 16); // reportId(1) + 报文（≥8B）
@@ -479,7 +552,7 @@ std::optional<BatteryDevice> queryWeisheng(hid_device *dev, const VgnDeviceEntry
               L"% charge=" + std::to_wstring(charge));
         return makeDevice(id, name, battery, charge != 0);
     }
-    LOG_WARN_W(L"[VGN] Weisheng no battery response after retries for " + name);
+    LOG_VERBOSE_W(L"[VGN] Weisheng no battery response after retries for " + name);
     return std::nullopt;
 }
 
@@ -498,12 +571,12 @@ std::optional<BatteryDevice> queryBeiying(hid_device *dev, const VgnDeviceEntry 
     }
     req.push_back(static_cast<unsigned char>(crc & 0xFF)); // 第 20 字节（索引 19）为 CRC
     if (writeOutputReport(dev, entry.reportId, req) < 0) {
-        LOG_WARN_W(L"[VGN] Beiying hid_write failed for " + name);
+        LOG_VERBOSE_W(L"[VGN] Beiying hid_write failed for " + name);
         return std::nullopt;
     }
     auto resp = readInputReport(dev, 32);
     if (!resp || resp->size() < 6) {
-        LOG_WARN_W(L"[VGN] Beiying no/short response for " + name);
+        LOG_VERBOSE_W(L"[VGN] Beiying no/short response for " + name);
         return std::nullopt;
     }
     const auto &r = *resp;
@@ -515,7 +588,7 @@ std::optional<BatteryDevice> queryBeiying(hid_device *dev, const VgnDeviceEntry 
         return std::nullopt;
     }
     if (r[base] != 74) {
-        LOG_WARN_W(L"[VGN] Beiying response cmd mismatch (" +
+        LOG_VERBOSE_W(L"[VGN] Beiying response cmd mismatch (" +
                    std::to_wstring(r[base]) + L"!=74) for " + name);
         return std::nullopt;
     }
@@ -566,7 +639,7 @@ std::optional<BatteryDevice> queryVgnRyMouse(hid_device *dev, const VgnDeviceEnt
     req = crcPad(std::move(req));
     auto resp = featureReportXfer(dev, entry.reportId, req, 64);
     if (!resp || resp->size() < 5) {
-        LOG_WARN_W(L"[VGN] VgnRyMouse no/short response for " + name);
+        LOG_VERBOSE_W(L"[VGN] VgnRyMouse no/short response for " + name);
         return std::nullopt;
     }
     const auto &i = *resp;
@@ -606,7 +679,7 @@ std::optional<BatteryDevice> queryYongjiaxin(hid_device *dev, const VgnDeviceEnt
 
     // 查电量（GetBattery=48）。
     if (writeOutputReport(dev, entry.reportId, build(48)) < 0) {
-        LOG_WARN_W(L"[VGN] Yongjiaxin hid_write failed for " + name);
+        LOG_VERBOSE_W(L"[VGN] Yongjiaxin hid_write failed for " + name);
         return std::nullopt;
     }
     for (int attempt = 0; attempt < 2; ++attempt) {
@@ -655,12 +728,12 @@ std::optional<BatteryDevice> queryVgnLdMs(hid_device *dev, const VgnDeviceEntry 
     }
     req.push_back(static_cast<unsigned char>(255 - (sum & 0xFF))); // 第 33 字节 CRC
     if (writeOutputReport(dev, entry.reportId, req) < 0) {
-        LOG_WARN_W(L"[VGN] VgnLdMs hid_write failed for " + name);
+        LOG_VERBOSE_W(L"[VGN] VgnLdMs hid_write failed for " + name);
         return std::nullopt;
     }
     auto resp = readInputReport(dev, 33);
     if (!resp || resp->size() < 4) {
-        LOG_WARN_W(L"[VGN] VgnLdMs no/short response for " + name);
+        LOG_VERBOSE_W(L"[VGN] VgnLdMs no/short response for " + name);
         return std::nullopt;
     }
     const auto &n = *resp;
@@ -670,7 +743,7 @@ std::optional<BatteryDevice> queryVgnLdMs(hid_device *dev, const VgnDeviceEntry 
     }
     // i==GetDeviceInfo(2) 且 n[1]==37。
     if (base + 3 > n.size() || n[base] != 2 || n[base + 1] != 37) {
-        LOG_WARN_W(L"[VGN] VgnLdMs response mismatch for " + name);
+        LOG_VERBOSE_W(L"[VGN] VgnLdMs response mismatch for " + name);
         return std::nullopt;
     }
     const int battery = n[base + 2];
@@ -744,7 +817,7 @@ std::optional<BatteryDevice> queryArbit(hid_device *dev, const VgnDeviceEntry &e
         gotAny = true;
     }
     if (!gotAny) {
-        LOG_WARN_W(L"[VGN] Arbit GetFunc no response for " + name);
+        LOG_VERBOSE_W(L"[VGN] Arbit GetFunc no response for " + name);
         return std::nullopt;
     }
     const int battery = funcBuf[32] & 0x7F;
@@ -800,12 +873,12 @@ std::optional<BatteryDevice> queryByKeyboard(hid_device *dev, const VgnDeviceEnt
     std::vector<unsigned char> outputReq(63, 0);
     std::copy(command.begin(), command.end(), outputReq.begin());
     if (writeOutputReport(dev, entry.reportId, outputReq) < 0) {
-        LOG_WARN_W(L"[VGN] ByKeyboard hid_write failed for " + name);
+        LOG_VERBOSE_W(L"[VGN] ByKeyboard hid_write failed for " + name);
         return std::nullopt;
     }
     auto resp = readInputReport(dev, 64);
     if (!resp) {
-        LOG_WARN_W(L"[VGN] ByKeyboard no response for " + name);
+        LOG_VERBOSE_W(L"[VGN] ByKeyboard no response for " + name);
         return std::nullopt;
     }
     return parseBattery(*resp);
@@ -838,12 +911,12 @@ std::optional<BatteryDevice> queryVgnKc2(hid_device *dev, const VgnDeviceEntry &
     std::vector<unsigned char> req(20, 0);
     req[0] = 6; // getDeviceInfo
     if (writeOutputReport(dev, entry.reportId, req) < 0) {
-        LOG_WARN_W(L"[VGN] VgnKc2 hid_write failed for " + name);
+        LOG_VERBOSE_W(L"[VGN] VgnKc2 hid_write failed for " + name);
         return std::nullopt;
     }
     auto resp = readInputReport(dev, 21);
     if (!resp || resp->size() < 20) {
-        LOG_WARN_W(L"[VGN] VgnKc2 no/short response for " + name);
+        LOG_VERBOSE_W(L"[VGN] VgnKc2 no/short response for " + name);
         return std::nullopt;
     }
     const auto &n = *resp;
@@ -852,7 +925,7 @@ std::optional<BatteryDevice> queryVgnKc2(hid_device *dev, const VgnDeviceEntry &
         base = 1;
     }
     if (base + 20 > n.size() || n[base] != 6) {
-        LOG_WARN_W(L"[VGN] VgnKc2 response mismatch for " + name);
+        LOG_VERBOSE_W(L"[VGN] VgnKc2 response mismatch for " + name);
         return std::nullopt;
     }
     const int levelByte = n[base + 19];
@@ -894,7 +967,7 @@ std::optional<BatteryDevice> queryMouseEnc(hid_device *dev, const VgnDeviceEntry
         req[kPktSize - 1] = static_cast<unsigned char>((crc - entry.reportId) & 0xFF);
 
         if (writeOutputReport(dev, entry.reportId, req) < 0) {
-            LOG_WARN_W(L"[VGN] MouseEnc hid_write failed for " + name);
+            LOG_VERBOSE_W(L"[VGN] MouseEnc hid_write failed for " + name);
             return std::nullopt;
         }
         // 读响应帧：reportId(1) + 16B payload。校验响应 reportId===本族 reportId。
@@ -932,7 +1005,7 @@ std::optional<BatteryDevice> queryMouseEnc(hid_device *dev, const VgnDeviceEntry
     // 2) 查电量。BatteryLevel 响应：level=[5]、charging=([6]==1)、voltage=[7..8]。
     auto bat = sendCmd(kCmdBatteryLevel);
     if (!bat || bat->size() < 7) {
-        LOG_WARN_W(L"[VGN] MouseEnc " + name + L" BatteryLevel no valid response");
+        LOG_VERBOSE_W(L"[VGN] MouseEnc " + name + L" BatteryLevel no valid response");
         return std::nullopt;
     }
     const int rawBattery = (*bat)[5];
@@ -991,11 +1064,12 @@ std::vector<BatteryDevice> VgnHidProvider::readDevices()
     // 其中只有部分接口能成功 hid_write / 响应电量协议，且 hidapi 枚举顺序不稳定：
     // 某轮排在第一的接口可能恰好是被系统驱动独占 / 会 hid_write 失败的接口。
     //
-    // 因此采用「收集候选 → 逐个尝试直到成功」策略：
+    // 因此采用「收集候选 → 缓存入口 → 只查缓存接口」策略：
     //   1) 第一遍扫描：按 (VID,PID) 分组，把每个设备的所有候选接口（已通过协议族
-    //      匹配 + usage 过滤）收集起来，避免遗漏 vendor-defined 配置接口。
-    //   2) 第二遍查询：对每个设备依次尝试它的候选接口，任一接口查询成功即停止
-    //      （不再试同设备其它接口，消除冗余发包）；全部失败才记一次失败。
+    //      匹配 + usage 过滤 + 报告描述符预筛）收集起来，避免遗漏 vendor-defined 接口。
+    //   2) 第二遍查询：若该设备已有缓存的「成功接口 path」且仍在本轮枚举里，则只查它
+    //      一个（设备休眠导致失败时也保留缓存、不回退全量遍历，避免反复扫全部接口）；
+    //      否则全量发现：逐个试候选接口，任一成功即停止并写回缓存；全部失败记一次失败。
     struct VidPid { uint16_t vid; uint16_t pid; };
     auto vidPidKey = [](uint16_t v, uint16_t p) { return static_cast<uint64_t>(v) << 16 | p; };
 
@@ -1081,6 +1155,19 @@ std::vector<BatteryDevice> VgnHidProvider::readDevices()
             name = cand.entry.name;
         }
 
+        // 先用报告描述符预筛：既无输出报告也无 Feature 报告的接口（如纯输入接口）无法
+        // 承载任何 VGN 写入式查询（hid_write / hid_send_feature_report 必然被拒，
+        // ERROR_INVALID_FUNCTION），这里提前跳过，避免每轮对每个此类接口都打开 / 写入 /
+        // 报错刷屏。多接口接收器（如 F2 Pro Max Dongle 常暴露 ~9 个接口）只有其中少数
+        // 接口可写，预筛后候选集显著收敛。
+        size_t outDataLen = kDefaultReportDataSize;
+        size_t inDataLen = kDefaultReportDataSize;
+        size_t featureDataLen = kDefaultReportDataSize;
+        if (!queryReportByteLengths(cur->path, outDataLen, inDataLen, featureDataLen)) {
+            LOG_VERBOSE_W(L"[VGN]   -> skipped (interface has no writable report) path=" + path);
+            return std::nullopt; // 试同设备下一个候选接口
+        }
+
         hid_device *dev = hid_open_path(cur->path);
         if (!dev) {
             LOG_VERBOSE_W(L"[VGN]   hid_open_path failed for " + name + L": " +
@@ -1113,29 +1200,48 @@ std::vector<BatteryDevice> VgnHidProvider::readDevices()
         bool got = false;
         const char *successPath = nullptr; // 本轮真正成功的接口 path（用于刷新缓存）
 
-        // 优先试缓存命中接口。命中成功即跳过该设备其余接口的无谓遍历。
+        // —— 缓存即权威 ——
+        // hidapi 枚举顺序不稳定，且同一设备常只有一个接口能成功响应电量协议。一旦在
+        // 某轮发现可用的接口 path，就把它当作该设备的「唯一查询入口」长期记住：此后每轮
+        // 只查这一个接口。这样即便设备休眠（该接口本轮无响应）也只浪费一次查询，而不是
+        // 回去把全部接口又轮询一遍——后者正是历史日志噪音的来源。
+        //
+        // 只有两种情况需要重新全量发现可用接口：
+        //   1) 首次见到该设备（无缓存）；
+        //   2) 缓存的 path 已不在本轮枚举结果里（设备拔插 / 换口 / 重新枚举后 path 变了）。
+        // 缓存 path 仍在但本轮无响应时，视为设备暂时休眠，保留缓存，下一轮继续只查它。
         const auto cacheIt = m_lastGoodPath.find(g.first);
-        if (cacheIt != m_lastGoodPath.end()) {
+        const bool hasCache = cacheIt != m_lastGoodPath.end();
+
+        // 缓存 path 是否仍在本轮枚举结果里？
+        const Candidate *cachedCand = nullptr;
+        if (hasCache) {
             for (const Candidate &cand : g.second) {
                 if (std::strcmp(cand.info->path, cacheIt->second.c_str()) == 0) {
-                    LOG_VERBOSE_W(L"[VGN]   trying cached interface path first");
-                    if (auto result = tryInterface(cand)) {
-                        devices.push_back(*result);
-                        got = true;
-                        successPath = cand.info->path;
-                    }
-                    break; // 缓存接口只试一次（无论成败不再在本块重试）
+                    cachedCand = &cand;
+                    break;
                 }
             }
         }
+        const bool cacheAlive = cachedCand != nullptr;
 
-        // 回退遍历：缓存未命中 / 缓存接口本轮失败时，逐个试其余候选接口直到成功。
-        if (!got) {
+        if (hasCache && !cacheAlive) {
+            // 缓存的接口已消失（拔插 / 换口）：清掉死路径，本轮走全量发现找新接口。
+            m_lastGoodPath.erase(g.first);
+        }
+
+        if (cacheAlive) {
+            // 只查缓存接口一个，无论成败都不再试该设备其余接口。
+            LOG_VERBOSE_W(L"[VGN]   querying cached interface only");
+            if (auto result = tryInterface(*cachedCand)) {
+                devices.push_back(*result);
+                got = true;
+                successPath = cachedCand->info->path;
+            }
+            // 失败时保留缓存（设备休眠），不回退到全量遍历。
+        } else {
+            // 无缓存 / 缓存已失效：全量发现。逐个试候选接口直到成功。
             for (const Candidate &cand : g.second) {
-                if (cacheIt != m_lastGoodPath.end() &&
-                    std::strcmp(cand.info->path, cacheIt->second.c_str()) == 0) {
-                    continue; // 缓存接口刚才已试过，跳过
-                }
                 if (auto result = tryInterface(cand)) {
                     devices.push_back(*result);
                     got = true;
@@ -1146,34 +1252,26 @@ std::vector<BatteryDevice> VgnHidProvider::readDevices()
         }
 
         if (got && successPath) {
-            // 成功后（无论来自缓存接口还是回退接口）刷新缓存，记录本轮真正成功的 path。
             m_lastGoodPath[g.first] = successPath;
         }
 
         if (!got && !g.second.empty()) {
-            // 全部失败：若缓存 path 已不在本轮候选里（设备拔插/换口），清掉死路径缓存，
-            // 避免长期记住一个再也不会出现的接口。缓存接口仍在但本轮无响应时保留缓存，
-            // 下一轮继续优先试它（设备只是暂时休眠）。
-            if (cacheIt != m_lastGoodPath.end()) {
-                bool stillPresent = false;
-                for (const Candidate &cand : g.second) {
-                    if (std::strcmp(cand.info->path, cacheIt->second.c_str()) == 0) {
-                        stillPresent = true;
-                        break;
-                    }
-                }
-                if (!stillPresent) {
-                    m_lastGoodPath.erase(g.first);
-                }
-            }
-
             const auto &cand0 = g.second.front();
             std::wstring name = cand0.info->product_string ? cand0.info->product_string : L"";
             if (name.empty()) {
                 name = cand0.entry.name;
             }
-            LOG_WARN_W(L"[VGN]   " + name + L" query returned no data this cycle "
-                       L"(tried " + std::to_wstring(g.second.size()) + L" interface(s))");
+            // 汇总为 WARN：这是「该周期设备确实读不到」的真实信号（与 BatteryManager 标
+            // (stale) 一致）。设备休眠时只查缓存接口一个，故此处每轮只触发一次 WARN，
+            // 不再伴随多条单接口 hid_write 失败。消息末尾注明本轮实际查询方式：
+            //   - cached:只查了缓存接口（设备休眠 / 被独占，缓存仍有效所以没回退全量）；
+            //   - scanned:N 个候选接口全试过都没成功（首次发现 / 缓存失效后的全量遍历）。
+            if (cacheAlive) {
+                LOG_WARN_W(L"[VGN]   " + name + L" query returned no data this cycle (cached)");
+            } else {
+                LOG_WARN_W(L"[VGN]   " + name + L" query returned no data this cycle "
+                           L"(scanned " + std::to_wstring(g.second.size()) + L" interface(s))");
+            }
         }
     }
 
