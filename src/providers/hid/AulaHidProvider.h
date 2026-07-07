@@ -10,7 +10,9 @@
 // 后挂接的键盘 / 鼠标的电量。
 //
 // 协议要点：
-//   - 传输：HID Output / Input Report，Report ID = 0（非 Feature Report），单包 32 字节。
+//   - 传输：HID Output / Input Report，Report ID = 0（非 Feature Report）。
+//     单包字节数按设备报告描述符动态查询（AULA 存在 32 / 64 等多种报告大小），
+//     查询失败时回退 32 字节默认值。
 //   - 设备匹配：内置 159 个 AULA PID 的型号表（VID=0x0C45）。每条记录该 PID 期望
 //     匹配的顶层 usage：
 //       * 标准簇 usage_page=0xFF68 / usage=0x0061（80 个 PID，绝大多数键盘 / 鼠标）；

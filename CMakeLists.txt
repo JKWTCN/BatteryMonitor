@@ -132,7 +132,8 @@ if(WIN32)
     # windowsapp: WinRT (BluetoothProvider); XInput: Xbox 手柄;
     # setupapi: ClassicBluetoothProvider 的 SetupDi 调用;
     # shell32: SHGetKnownFolderPath (Logger 解析 %APPDATA%)。
-    target_link_libraries(BatteryMonitor PRIVATE windowsapp XInput setupapi shell32)
+    # hid: HidD_GetPreparsedData / HidP_GetCaps（AulaHidProvider 查询设备报告长度）。
+    target_link_libraries(BatteryMonitor PRIVATE windowsapp XInput setupapi shell32 hid)
 
     # —— hidapi（AulaHidProvider 读取 AULA 2.4G 键盘/鼠标电量）——
     # external/hidapi 内为预编译的 Windows 二进制（hidapi.dll/.lib/.h，v0.15.0）。
