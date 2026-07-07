@@ -156,6 +156,17 @@ std::wstring pathToWString(const char *path)
     return std::wstring(path, path + std::strlen(path));
 }
 
+// 安全获取 hidapi 错误信息：只调用 hid_error 一次，并立即拷贝成 std::wstring，
+// 脱离 hidapi 内部 buffer 的生命周期。
+// hid_error 返回的指针归 hidapi 所有（仅在 hid_close 前/进程堆上有效），
+// 对处于失败/半残状态的句柄重复调用会反复触发其内部错误格式化路径（FormatMessageW
+// 操作进程堆），是历史上堆损坏崩溃（0xc0000374）的根因，故此处务必只取一次。
+std::wstring hidErrorString(hid_device *dev)
+{
+    const wchar_t *msg = hid_error(dev); // 仅调用一次
+    return std::wstring(msg ? msg : L"unknown");
+}
+
 BatteryLevel levelFromPercentage(int percentage)
 {
     if (percentage < 0) {
@@ -226,8 +237,7 @@ std::optional<std::vector<unsigned char>> sendReport(hid_device *dev,
         std::copy(request.begin(), request.end(), out.begin() + 1);
 
         if (hid_send_feature_report(dev, out.data(), out.size()) < 0) {
-            LOG_VERBOSE_W(L"[Razer] hid_send_feature_report failed: " +
-                          std::wstring(hid_error(dev) ? hid_error(dev) : L"unknown"));
+            LOG_VERBOSE_W(L"[Razer] hid_send_feature_report failed: " + hidErrorString(dev));
             continue;
         }
 
@@ -239,8 +249,7 @@ std::optional<std::vector<unsigned char>> sendReport(hid_device *dev,
         in[0] = 0;
         const int n = hid_get_feature_report(dev, in.data(), in.size());
         if (n <= 0) {
-            LOG_VERBOSE_W(L"[Razer] hid_get_feature_report failed: " +
-                          std::wstring(hid_error(dev) ? hid_error(dev) : L"unknown"));
+            LOG_VERBOSE_W(L"[Razer] hid_get_feature_report failed: " + hidErrorString(dev));
             continue;
         }
 
@@ -375,8 +384,7 @@ std::vector<BatteryDevice> RazerHidProvider::readDevices()
 
         hid_device *dev = hid_open_path(cur->path);
         if (!dev) {
-            LOG_VERBOSE_W(L"[Razer]   hid_open_path failed: " +
-                          std::wstring(hid_error(nullptr) ? hid_error(nullptr) : L"unknown"));
+            LOG_VERBOSE_W(L"[Razer]   hid_open_path failed: " + hidErrorString(nullptr));
             return std::nullopt;
         }
 

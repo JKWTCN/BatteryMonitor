@@ -275,6 +275,17 @@ std::wstring pathToWString(const char *path)
     return std::wstring(path, path + std::strlen(path));
 }
 
+// 安全获取 hidapi 错误信息：只调用 hid_error 一次，并立即拷贝成 std::wstring，
+// 脱离 hidapi 内部 buffer 的生命周期。
+// hid_error 返回的指针归 hidapi 所有（仅在 hid_close 前/进程堆上有效），
+// 对处于失败/半残状态的句柄重复调用会反复触发其内部错误格式化路径（FormatMessageW
+// 操作进程堆），是历史上堆损坏崩溃（0xc0000374）的根因，故此处务必只取一次。
+std::wstring hidErrorString(hid_device *dev)
+{
+    const wchar_t *msg = hid_error(dev); // 仅调用一次
+    return std::wstring(msg ? msg : L"unknown");
+}
+
 // 精确百分比 -> 离散档位（与其它 provider 一致）。
 BatteryLevel levelFromPercentage(int percentage)
 {
@@ -347,16 +358,14 @@ std::optional<std::vector<unsigned char>> featureReportXfer(hid_device *dev,
     req.push_back(reportId);
     req.insert(req.end(), data.begin(), data.end());
     if (hid_send_feature_report(dev, req.data(), req.size()) < 0) {
-        LOG_ERR_W(L"[VGN] hid_send_feature_report failed: " +
-                  std::wstring(hid_error(dev) ? hid_error(dev) : L"unknown"));
+        LOG_ERR_W(L"[VGN] hid_send_feature_report failed: " + hidErrorString(dev));
         return std::nullopt;
     }
     std::vector<unsigned char> resp(responseSize + 1, 0);
     resp[0] = reportId;
     int n = hid_get_feature_report(dev, resp.data(), resp.size());
     if (n <= 0) {
-        LOG_ERR_W(L"[VGN] hid_get_feature_report failed: " +
-                  std::wstring(hid_error(dev) ? hid_error(dev) : L"unknown"));
+        LOG_ERR_W(L"[VGN] hid_get_feature_report failed: " + hidErrorString(dev));
         return std::nullopt;
     }
     // 去掉首字节 reportId，返回 payload。
@@ -371,8 +380,7 @@ std::optional<std::vector<unsigned char>> readInputReport(hid_device *dev, size_
     int n = hid_read_timeout(dev, buf.data(), buf.size(), kReadTimeoutMs);
     if (n <= 0) {
         if (n < 0) {
-            LOG_ERR_W(L"[VGN] hid_read_timeout failed: " +
-                      std::wstring(hid_error(dev) ? hid_error(dev) : L"unknown"));
+            LOG_ERR_W(L"[VGN] hid_read_timeout failed: " + hidErrorString(dev));
         }
         return std::nullopt;
     }
@@ -1076,7 +1084,7 @@ std::vector<BatteryDevice> VgnHidProvider::readDevices()
         hid_device *dev = hid_open_path(cur->path);
         if (!dev) {
             LOG_VERBOSE_W(L"[VGN]   hid_open_path failed for " + name + L": " +
-                       std::wstring(hid_error(nullptr) ? hid_error(nullptr) : L"unknown"));
+                       hidErrorString(nullptr));
             return std::nullopt; // 试同设备下一个候选接口
         }
 
