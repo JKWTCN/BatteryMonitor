@@ -4,6 +4,8 @@ English | [简体中文](README.md)
 
 ![BatteryMonitor main window](image/README.en/1783349497277.png "BatteryMonitor main window")
 
+![BatteryMonitor 系统托盘电量提示](image/README/1783349577055.png "BatteryMonitor tray")
+
 BatteryMonitor is a Windows desktop battery monitor for common wireless peripherals. It shows device battery status in a main window and in the system tray.
 
 The project is built with Qt 6 and CMake. It uses multiple providers to read battery information from Bluetooth devices, Xbox controllers, and HID 2.4G dongles, then presents them through a unified UI.
@@ -13,13 +15,14 @@ The project is built with Qt 6 and CMake. It uses multiple providers to read bat
 Only the following devices have been tested so far:
 
 | Device Type                 | PID/VID                                                                   | Verification Status |
-| --------------------------- | ------------------------------------------------------------------------- | -------- |
-| Generic Bluetooth devices   | No fixed USB VID/PID; uses Windows Bluetooth device information           | Verified |
-| AULA F87ProV2D Dongle       | VID `0x0C45` / PID `0xFEFE`                                           | Verified |
-| VGN DragonFly F2 Pro Max    | VGN MouseEnc protocol family; actual VID/PID depends on the device report | Verified |
-| AirPods 2                   | Apple Company ID `0x004C` / Model ID `0x200F`                         | Verified |
-| Xbox controller             | VID `0x045E`; PID depends on the exact model                            | Verified |
-| Razer Basilisk X HyperSpeed | VID `0x1532` / PID `0x0083`                                           | Verified |
+| --------------------------- | ------------------------------------------------------------------------- | ------------------- |
+| Generic Bluetooth devices   | No fixed USB VID/PID; uses Windows Bluetooth device information           | Verified            |
+| AULA F87ProV2D Dongle       | VID`0x0C45` / PID `0xFEFE`                                            | Verified            |
+| AJAZZ MK87PRO               | VID`0x0C45` / PID `0x2729`                                            | Verified            |
+| VGN DragonFly F2 Pro Max    | VGN MouseEnc protocol family; actual VID/PID depends on the device report | Verified            |
+| AirPods 2                   | Apple Company ID`0x004C` / Model ID `0x200F`                          | Verified            |
+| Xbox controller             | VID`0x045E`; PID depends on the exact model                             | Verified            |
+| Razer Basilisk X HyperSpeed | VID`0x1532` / PID `0x0083`                                            | Verified            |
 
 ## Theoretically Supported Devices
 
@@ -27,11 +30,11 @@ Besides the verified devices above, the code also contains adapter logic for som
 
 | Device Type                                        | PID/VID                                                                               | Verification Status     |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------- |
-| AULA 2.4G dongle devices                           | VID `0x0C45`, built-in PID table                                                    | Theoretical, unverified |
+| AULA 2.4G dongle devices                           | VID`0x0C45`, built-in PID table                                                     | Theoretical, unverified |
 | VGN / related-brand 2.4G dongle keyboards and mice | Multiple VID/PID values, built-in protocol families and partial VID fallback matching | Theoretical, unverified |
-| Razer mice / keyboards                             | VID `0x1532`, built-in PID table                                                    | Theoretical, unverified |
-| AirPods / Beats series                             | Apple Company ID `0x004C`, built-in Model ID table                                  | Theoretical, unverified |
-| Xbox / XInput / Windows game controllers           | Microsoft VID `0x045E` or Windows controller interfaces                             | Theoretical, unverified |
+| Razer mice / keyboards                             | VID`0x1532`, built-in PID table                                                     | Theoretical, unverified |
+| AirPods / Beats series                             | Apple Company ID`0x004C`, built-in Model ID table                                   | Theoretical, unverified |
+| Xbox / XInput / Windows game controllers           | Microsoft VID`0x045E` or Windows controller interfaces                              | Theoretical, unverified |
 | Standard BLE Battery Service devices               | BLE GATT Battery Service, no fixed USB VID/PID                                        | Theoretical, unverified |
 | Classic Bluetooth audio devices                    | Windows BTHENUM device property, no fixed USB VID/PID                                 | Theoretical, unverified |
 
