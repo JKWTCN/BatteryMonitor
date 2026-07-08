@@ -14,15 +14,15 @@ The project is built with Qt 6 and CMake. It uses multiple providers to read bat
 
 Only the following devices have been tested so far:
 
-| Device Type                 | PID/VID                                                                   | Verification Status |
-| --------------------------- | ------------------------------------------------------------------------- | ------------------- |
-| Generic Bluetooth devices   | No fixed USB VID/PID; uses Windows Bluetooth device information           | Verified            |
-| AULA F87ProV2D Dongle       | VID`0x0C45` / PID `0xFEFE`                                            | Verified            |
-| AJAZZ MK87PRO               | VID`0x0C45` / PID `0x2729`                                            | Verified            |
-| VGN DragonFly F2 Pro Max    | VGN MouseEnc protocol family; actual VID/PID depends on the device report | Verified            |
-| AirPods 2                   | Apple Company ID`0x004C` / Model ID `0x200F`                          | Verified            |
-| Xbox controller             | VID`0x045E`; PID depends on the exact model                             | Verified            |
-| Razer Basilisk X HyperSpeed | VID`0x1532` / PID `0x0083`                                            | Verified            |
+| Device Type                             | PID/VID                                                                   | Verification Status |
+| --------------------------------------- | ------------------------------------------------------------------------- | ------------------- |
+| Generic Bluetooth devices               | No fixed USB VID/PID; uses Windows Bluetooth device information           | Verified            |
+| AULA F87ProV2D + AULA F87ProV2D Dongle | VID`0x0C45` / PID `0xFEFE`                                            | Verified            |
+| AJAZZ MK87PRO + HS USB Dongle           | VID`0x0C45` / PID `0xFEFC`                                            | Verified            |
+| VGN DragonFly F2 Pro Max + Dongle       | VGN MouseEnc protocol family; actual VID/PID depends on the device report | Verified            |
+| AirPods 2                               | Apple Company ID`0x004C` / Model ID `0x200F`                          | Verified            |
+| Xbox controller                         | VID`0x045E`; PID depends on the exact model                             | Verified            |
+| Razer Basilisk X HyperSpeed + Dongle    | VID`0x1532` / PID `0x0083`                                            | Verified            |
 
 ## Theoretically Supported Devices
 
@@ -30,7 +30,7 @@ Besides the verified devices above, the code also contains adapter logic for som
 
 | Device Type                                        | PID/VID                                                                               | Verification Status     |
 | -------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------- |
-| AULA 2.4G dongle devices                           | VID`0x0C45`, built-in PID table                                                     | Theoretical, unverified |
+| AULA / AJAZZ 2.4G dongle devices                   | VID`0x0C45`, 2.4G dongle PID allowlist only                                         | Theoretical, unverified |
 | VGN / related-brand 2.4G dongle keyboards and mice | Multiple VID/PID values, built-in protocol families and partial VID fallback matching | Theoretical, unverified |
 | Razer mice / keyboards                             | VID`0x1532`, built-in PID table                                                     | Theoretical, unverified |
 | AirPods / Beats series                             | Apple Company ID`0x004C`, built-in Model ID table                                   | Theoretical, unverified |
@@ -39,6 +39,8 @@ Besides the verified devices above, the code also contains adapter logic for som
 | Classic Bluetooth audio devices                    | Windows BTHENUM device property, no fixed USB VID/PID                                 | Theoretical, unverified |
 
 If your device can be detected and its battery can be read correctly, device model and test results are welcome. They can be added to the verified device list later.
+
+Note: AULA / AJAZZ wired USB keyboard bodies are not included in the current HID battery reading scope, even when they are visible through WebHID. The provider only reads battery data for devices behind a 2.4G dongle.
 
 ## Features
 

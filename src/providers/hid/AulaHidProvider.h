@@ -6,19 +6,16 @@
 #include <string>
 #include <unordered_map>
 
-// HID 电量提供者：通过 hidapi 读取 AULA 品牌（VID=0x0C45）2.4G 接收器
-// 后挂接的键盘 / 鼠标的电量。
+// HID 电量提供者：通过 hidapi 读取 AULA / AJAZZ 2.4G 接收器后挂接设备的电量。
 //
 // 协议要点：
 //   - 传输：HID Output / Input Report，Report ID = 0（非 Feature Report）。
 //     单包字节数按设备报告描述符动态查询（AULA 存在 32 / 64 等多种报告大小），
 //     查询失败时回退 32 字节默认值。
-//   - 设备匹配：内置 162 个 AULA / AJAZZ PID 的型号表（VID=0x0C45）。每条记录该 PID 期望
-//     匹配的顶层 usage：
-//       * 标准簇 usage_page=0xFF68 / usage=0x0061（80 个 PID，绝大多数键盘 / 鼠标）；
+//   - 设备匹配：仅启用 2.4G dongle PID，不匹配有线 USB 键盘本体。
 //       * 特殊簇 usage_page=0xFF80 / usage=0x0001（0xFEFC）；
-//       * 通配簇（81 个 PID，含 0xFEFE/F87 Pro Dongle）——不限定 usage，取该 PID 下
-//         任一 vendor-defined 接口。
+//       * 通配簇（含 0xFEFE/F87 Pro Dongle）——不限定 usage，取该 PID 下任一
+//         vendor-defined 接口。
 //   - 请求包（32 字节）：
 //       [0]=0xAA, [1]=cmd, [2]=contentSize, [3]=addrLo, [4]=addrHi,
 //       [5..7]=otherHeader / 尾包标记, [8..]=payload。无校验和。
@@ -27,7 +24,6 @@
 //   - 字段：payload[16] = workMode，payload[17] = battery(0-100)，
 //     payload[18] = chargeStatus(≠0 即充电)；payload[4..7] = 设备自报 vid/pid
 //     （小端，仅用于日志）。
-//   - 有线模式不提供有效电池百分比，展示为有线供电而非 0%。
 //
 // —— 双协议支持（重要）——
 // AULA / 关联品牌存在两代固件协议，命令号、contentSize、尾包标记都不同，
@@ -49,7 +45,7 @@ public:
     std::vector<BatteryDevice> readDevices() override;
 
 private:
-    // 上次查询成功的接口 path，按 PID 缓存（VID 固定 0x0C45）。
+    // 上次查询成功的接口 path，按 VID/PID 组合缓存。
     // 命中则优先只查该接口；失败/失效回退该设备其余接口的全量遍历，成功后更新。
-    std::unordered_map<std::uint16_t, std::string> m_lastGoodPath;
+    std::unordered_map<std::uint32_t, std::string> m_lastGoodPath;
 };

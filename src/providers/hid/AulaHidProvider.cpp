@@ -18,8 +18,10 @@
 namespace
 {
     // —— 协议常量 ——
-    // AULA 品牌专属 VendorId（vendorId = 3141 = 0x0C45）。
-    constexpr uint16_t kAulaVendorId = 0x0C45;
+    // AULA / AJAZZ 2.4G 接收器 VendorId。
+    constexpr uint16_t kAulaVendorIds[] = {
+        0x0C45,
+    };
 
     // —— GET_DEVICE_INFO 协议族 ——
     //
@@ -127,16 +129,15 @@ namespace
         return BatteryLevel::Empty;
     }
 
-    // —— AULA 设备型号表 ——
+    // —— AULA 2.4G 接收器型号表 ——
     //
-    // 每条记录该 PID 期望匹配的顶层 usage。仅保留 VID=0x0C45 的 AULA 条目。
+    // 每条记录该 PID 期望匹配的顶层 usage。这里只启用 2.4G dongle，
+    // 不匹配有线 USB 键盘本体。
     //
     // usagePage/usage 为 0 表示「通配簇」——对该 PID 不带 usage 过滤，即该 PID 的
     // 任一接口都可承载配置协议。非 0 表示「按 usage 精确匹配」：
-    //   - 标准簇 0xFF68 / 0x0061：绝大多数键盘 / 鼠标（80 个 PID）；
-    //   - 特殊簇 0xFF80 / 0x0001：0xFEFC（1 个 PID）。
-    //
-    // 新增型号：在此追加对应条目即可，无需改动其它逻辑。
+    //   - 特殊簇 0xFF80 / 0x0001：0xFEFC；
+    //   - 通配簇：其它 2.4G dongle PID。
     struct AulaDeviceEntry
     {
         uint16_t pid;
@@ -144,9 +145,19 @@ namespace
         uint16_t usage;     // 0 = 通配
     };
 
+    constexpr AulaDeviceEntry kAulaDongleDevices[] = {
+        {0xFEFC, 0xFF80, 0x0001}, // AJAZZ MK87PRO + HS USB Dongle /已验证
+        {0xFEF8, 0x0000, 0x0000},
+        {0xFEF9, 0x0000, 0x0000},
+        {0xFEFA, 0x0000, 0x0000},
+        {0xFEFD, 0x0000, 0x0000},
+        {0xFEFE, 0x0000, 0x0000}, // AULA F87ProV2D Dongle /已验证
+    };
+
+#if 0
+    // 有线 USB 键盘本体 PID 保留在这里作参考；当前 provider 只查询 2.4G dongle。
     constexpr AulaDeviceEntry kAulaDevices[] = {
         // —— 特殊簇 usage_page=0xFF80 / usage=0x0001 ——
-        {0xFEFC, 0xFF80, 0x0001},
         // —— 标准簇 usage_page=0xFF68 / usage=0x0061 ——
         {0x8030, 0xFF68, 0x0061},
         {0x8031, 0xFF68, 0x0061},
@@ -312,10 +323,54 @@ namespace
         {0xFEFE, 0x0000, 0x0000}, // AULA F87ProV2D Dongle /已验证
     };
 
-    // 在设备表中查找 PID 命中的条目；返回 nullptr 表示该 PID 不被支持。
-    const AulaDeviceEntry *findAulaEntry(std::uint16_t pid)
+    constexpr AulaDeviceEntry kAula38A6Devices[] = {
+        {0x2710, 0x0000, 0x0000}, // AULA 设备
+        {0x2711, 0x0000, 0x0000}, // AULA 设备
+        {0x2712, 0x0000, 0x0000}, // AULA 设备
+        {0x271A, 0x0000, 0x0000}, // AULA 设备
+        {0x271B, 0x0000, 0x0000}, // AULA 设备
+        {0x271C, 0x0000, 0x0000}, // AULA 设备
+        {0x271F, 0x0000, 0x0000}, // AULA 设备
+        {0x2722, 0x0000, 0x0000}, // AULA 设备
+        {0x2723, 0x0000, 0x0000}, // AULA 设备
+        {0x2724, 0x0000, 0x0000}, // AULA 设备
+        {0x2727, 0x0000, 0x0000}, // AULA 设备
+        {0x2728, 0x0000, 0x0000}, // AULA 设备
+        {0x272A, 0x0000, 0x0000}, // AULA 设备
+        {0x2734, 0x0000, 0x0000}, // AULA 设备
+        {0x2736, 0x0000, 0x0000}, // AULA 设备
+        {0x2737, 0x0000, 0x0000}, // AULA 设备
+        {0x2738, 0x0000, 0x0000}, // AULA 设备
+        {0x273B, 0x0000, 0x0000}, // AULA 设备
+        {0x273D, 0x0000, 0x0000}, // AULA 设备
+        {0x273E, 0x0000, 0x0000}, // AULA 设备
+        {0x2741, 0x0000, 0x0000}, // AULA 设备
+        {0x2755, 0x0000, 0x0000}, // AULA 设备
+        {0x2756, 0x0000, 0x0000}, // AULA 设备
+        {0x2757, 0x0000, 0x0000}, // AULA 设备
+        {0x2758, 0x0000, 0x0000}, // AULA 设备
+        {0x2759, 0x0000, 0x0000}, // AULA 设备
+        {0x275A, 0x0000, 0x0000}, // AULA 设备
+        {0x2908, 0x0000, 0x0000}, // AULA 设备
+        {0x290B, 0x0000, 0x0000}, // AULA 设备
+        {0x290C, 0x0000, 0x0000}, // AULA 设备
+        {0x290F, 0x0000, 0x0000}, // AULA 设备
+    };
+
+    constexpr AulaDeviceEntry kAula28A6Devices[] = {
+        {0x2722, 0x0000, 0x0000}, // AULA 设备
+    };
+
+    constexpr AulaDeviceEntry kAula17EFDevices[] = {
+        {0x62F0, 0x0000, 0x0000}, // AULA 设备
+    };
+#endif
+
+    template <size_t N>
+    const AulaDeviceEntry *findAulaEntryIn(const AulaDeviceEntry (&entries)[N],
+                                           std::uint16_t pid)
     {
-        for (const AulaDeviceEntry &e : kAulaDevices)
+        for (const AulaDeviceEntry &e : entries)
         {
             if (e.pid == pid)
             {
@@ -323,6 +378,23 @@ namespace
             }
         }
         return nullptr;
+    }
+
+    // 在设备表中查找 VID/PID 命中的条目；返回 nullptr 表示该设备不被支持。
+    const AulaDeviceEntry *findAulaEntry(std::uint16_t vendorId, std::uint16_t pid)
+    {
+        switch (vendorId)
+        {
+        case 0x0C45:
+            return findAulaEntryIn(kAulaDongleDevices, pid);
+        default:
+            return nullptr;
+        }
+    }
+
+    std::uint32_t deviceKey(std::uint16_t vendorId, std::uint16_t productId)
+    {
+        return (static_cast<std::uint32_t>(vendorId) << 16) | productId;
     }
 
     // 判断枚举到的接口是否承载 AULA 配置协议（即值得查询电量）。
@@ -657,40 +729,57 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
         return devices;
     }
 
-    // 仅枚举 AULA VID，再按设备表 + usage 二次过滤。
-    hid_device_info *enumHead = hid_enumerate(kAulaVendorId, 0);
-    if (!enumHead)
+    // 仅枚举已知 AULA / AJAZZ VID，再按设备表 + usage 二次过滤。
+    std::vector<hid_device_info *> enumHeads;
+    int totalInterfaces = 0;
+    for (const uint16_t vendorId : kAulaVendorIds)
     {
-        // 没有 VID=0x0C45 的设备：常态，仅 debug 级提示（INFO 输出便于排障）。
-        LOG_VERBOSE_W(L"[HID] hid_enumerate(0x0C45) returned 0 devices "
-                      L"(键盘是否处于 2.4G 模式？接收器是否已插入？)");
+        hid_device_info *head = hid_enumerate(vendorId, 0);
+        if (!head)
+        {
+            LOG_VERBOSE_W(L"[HID] hid_enumerate(0x" + std::wstring{toHex4(vendorId)} +
+                          L") returned 0 devices "
+                          L"(键盘是否处于 2.4G 模式？接收器是否已插入？)");
+            continue;
+        }
+
+        int vendorInterfaces = 0;
+        for (hid_device_info *c = head; c; c = c->next)
+        {
+            ++vendorInterfaces;
+        }
+        totalInterfaces += vendorInterfaces;
+        enumHeads.push_back(head);
+
+        LOG_VERBOSE_W(L"[HID] hid_enumerate(0x" + std::wstring{toHex4(vendorId)} +
+                      L") returned " + std::to_wstring(vendorInterfaces) +
+                      L" interface(s)");
+    }
+
+    if (enumHeads.empty())
+    {
         return devices;
     }
-
-    // 先统计枚举到的接口数，便于从日志判断接收器是否就绪。
-    int totalInterfaces = 0;
-    for (hid_device_info *c = enumHead; c; c = c->next)
-    {
-        ++totalInterfaces;
-    }
-    LOG_VERBOSE_W(L"[HID] hid_enumerate(0x0C45) returned " + std::to_wstring(totalInterfaces) +
+    LOG_VERBOSE_W(L"[HID] hid_enumerate matched total " + std::to_wstring(totalInterfaces) +
                   L" interface(s)");
 
-    // 同一物理设备常暴露多个接口；按 PID 去重，避免对一台设备查询多次。
+    // 同一物理设备常暴露多个接口；按 VID/PID 去重，避免对一台设备查询多次。
     //
     // 接口缓存：Dongle 常暴露多个同 PID 的 vendor-defined 接口，但只有一个能成功
     // 响应电量协议。原「边枚举边查、失败不去重」会让每个匹配接口每轮都重发
-    // 0x10/0xA0。记住上次成功的接口 path，下轮优先（且只先）查它；命中即跳过同 PID
+    // 0x10/0xA0。记住上次成功的接口 path，下轮优先（且只先）查它；命中即跳过同设备
     // 其余接口的无谓发包。缓存接口本轮失败（设备休眠/被独占）时回退该设备其余接口
     // 的全量遍历，成功后更新缓存；缓存 path 已不在枚举结果里（拔插/换口）时自然失效。
-    std::unordered_set<std::uint16_t> processedPids;
+    std::unordered_set<std::uint32_t> processedDevices;
 
     // 单接口查询：打开设备 → 多协议尝试 → 解析。
     // 返回成功解析的 BatteryDevice；失败返回 nullopt。
     auto tryInterface = [&](hid_device_info *cur,
                             const AulaDeviceEntry *entry) -> std::optional<BatteryDevice>
     {
-        LOG_VERBOSE_W(L"[HID] interface: pid=0x" +
+        LOG_VERBOSE_W(L"[HID] interface: vid=0x" +
+                      std::wstring{toHex4(cur->vendor_id)} +
+                      L" pid=0x" +
                       std::wstring{toHex4(cur->product_id)} +
                       L" usage_page=0x" + std::wstring{toHex4(cur->usage_page)} +
                       L" usage=0x" + std::wstring{toHex4(cur->usage)} +
@@ -700,7 +789,8 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
         std::wstring name = cur->product_string ? cur->product_string : L"";
         if (name.empty())
         {
-            name = L"AULA Device 0x" + std::wstring{toHex4(cur->product_id)};
+            name = L"AULA Device 0x" + std::wstring{toHex4(cur->vendor_id)} +
+                   L":0x" + std::wstring{toHex4(cur->product_id)};
         }
 
         // 先查询该接口的报告长度：既决定请求包大小，也能预先判断接口是否可写。
@@ -772,9 +862,18 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
             if (payload && usedProto)
             {
                 out = parseDeviceInfo(*payload, *usedProto, name, id);
-                LOG_VERBOSE_W(L"[HID]   " + name + L" = " +
-                              std::to_wstring(out->percentage) +
-                              L"% charging=" + (out->charging ? L"1" : L"0"));
+                if (out->wired)
+                {
+                    LOG_VERBOSE_W(L"[HID]   " + name +
+                                  L" skipped (not a 2.4G battery device)");
+                    out.reset();
+                }
+                else
+                {
+                    LOG_VERBOSE_W(L"[HID]   " + name + L" = " +
+                                  std::to_wstring(out->percentage) +
+                                  L"% charging=" + (out->charging ? L"1" : L"0"));
+                }
             }
             else
             {
@@ -800,85 +899,100 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
         return out;
     };
 
-    // 第一遍：只对缓存命中的 PID + 匹配 path 的接口查询。
-    for (hid_device_info *cur = enumHead; cur; cur = cur->next)
+    // 第一遍：只对缓存命中的设备 + 匹配 path 的接口查询。
+    for (hid_device_info *enumHead : enumHeads)
     {
-        if (processedPids.count(cur->product_id) != 0)
+        for (hid_device_info *cur = enumHead; cur; cur = cur->next)
         {
-            continue;
-        }
-        const AulaDeviceEntry *entry = findAulaEntry(cur->product_id);
-        if (!entry || !interfaceMatches(*entry, *cur))
-        {
-            continue;
-        }
-        const auto cacheIt = m_lastGoodPath.find(cur->product_id);
-        if (cacheIt == m_lastGoodPath.end())
-        {
-            continue; // 该 PID 无缓存，留给第二遍
-        }
-        if (std::strcmp(cur->path, cacheIt->second.c_str()) != 0)
-        {
-            continue; // 该接口非缓存接口，留给第二遍
-        }
-        LOG_VERBOSE_W(L"[HID]   trying cached interface path first");
-        if (auto result = tryInterface(cur, entry))
-        {
-            devices.push_back(*result);
-            processedPids.insert(cur->product_id);
-            m_lastGoodPath[cur->product_id] = cur->path; // 刷新（path 一般不变，等价写回）
+            const std::uint32_t key = deviceKey(cur->vendor_id, cur->product_id);
+            if (processedDevices.count(key) != 0)
+            {
+                continue;
+            }
+            const AulaDeviceEntry *entry = findAulaEntry(cur->vendor_id, cur->product_id);
+            if (!entry || !interfaceMatches(*entry, *cur))
+            {
+                continue;
+            }
+            const auto cacheIt = m_lastGoodPath.find(key);
+            if (cacheIt == m_lastGoodPath.end())
+            {
+                continue; // 该设备无缓存，留给第二遍
+            }
+            if (std::strcmp(cur->path, cacheIt->second.c_str()) != 0)
+            {
+                continue; // 该接口非缓存接口，留给第二遍
+            }
+            LOG_VERBOSE_W(L"[HID]   trying cached interface path first");
+            if (auto result = tryInterface(cur, entry))
+            {
+                devices.push_back(*result);
+                processedDevices.insert(key);
+                m_lastGoodPath[key] = cur->path; // 刷新（path 一般不变，等价写回）
+            }
         }
     }
 
-    // 第二遍：对未命中的 PID（或第一遍缓存接口失败的 PID）遍历其余接口，成功即停。
-    for (hid_device_info *cur = enumHead; cur; cur = cur->next)
+    // 第二遍：对未命中的设备（或第一遍缓存接口失败的设备）遍历其余接口，成功即停。
+    for (hid_device_info *enumHead : enumHeads)
     {
-        if (processedPids.count(cur->product_id) != 0)
+        for (hid_device_info *cur = enumHead; cur; cur = cur->next)
         {
-            continue; // 该 PID 本轮已成功，跳过同设备其它接口
-        }
-        const AulaDeviceEntry *entry = findAulaEntry(cur->product_id);
-        if (!entry)
-        {
-            LOG_VERBOSE_W(L"[HID]   -> skipped (pid not in AULA device table)");
-            continue;
-        }
-        if (!interfaceMatches(*entry, *cur))
-        {
-            LOG_VERBOSE_W(L"[HID]   -> skipped (interface usage does not match entry)");
-            continue;
-        }
-        const auto cacheIt = m_lastGoodPath.find(cur->product_id);
-        if (cacheIt != m_lastGoodPath.end() &&
-            std::strcmp(cur->path, cacheIt->second.c_str()) == 0)
-        {
-            continue; // 缓存接口刚才已在第一遍试过，跳过
-        }
+            const std::uint32_t key = deviceKey(cur->vendor_id, cur->product_id);
+            if (processedDevices.count(key) != 0)
+            {
+                continue; // 该设备本轮已成功，跳过同设备其它接口
+            }
+            const AulaDeviceEntry *entry = findAulaEntry(cur->vendor_id, cur->product_id);
+            if (!entry)
+            {
+                LOG_VERBOSE_W(L"[HID]   -> skipped (vid/pid pair not in AULA device table)");
+                continue;
+            }
+            if (!interfaceMatches(*entry, *cur))
+            {
+                LOG_VERBOSE_W(L"[HID]   -> skipped (interface usage does not match entry)");
+                continue;
+            }
+            const auto cacheIt = m_lastGoodPath.find(key);
+            if (cacheIt != m_lastGoodPath.end() &&
+                std::strcmp(cur->path, cacheIt->second.c_str()) == 0)
+            {
+                continue; // 缓存接口刚才已在第一遍试过，跳过
+            }
 
-        if (auto result = tryInterface(cur, entry))
-        {
-            devices.push_back(*result);
-            processedPids.insert(cur->product_id);
-            m_lastGoodPath[cur->product_id] = cur->path; // 成功后更新缓存
+            if (auto result = tryInterface(cur, entry))
+            {
+                devices.push_back(*result);
+                processedDevices.insert(key);
+                m_lastGoodPath[key] = cur->path; // 成功后更新缓存
+            }
         }
     }
 
-    // 清死路径：有缓存但本轮该 PID 所有接口都失败的，若缓存 path 已不在枚举结果里
+    // 清死路径：有缓存但本轮该设备所有接口都失败的，若缓存 path 已不在枚举结果里
     // （拔插/换口），清掉缓存；缓存接口仍在但无响应时保留，下一轮继续优先试。
     for (auto it = m_lastGoodPath.begin(); it != m_lastGoodPath.end();)
     {
-        if (processedPids.count(it->first) != 0)
+        if (processedDevices.count(it->first) != 0)
         {
             ++it; // 本轮已成功，缓存有效
             continue;
         }
         bool stillPresent = false;
-        for (hid_device_info *cur = enumHead; cur; cur = cur->next)
+        for (hid_device_info *enumHead : enumHeads)
         {
-            if (cur->product_id == it->first &&
-                std::strcmp(cur->path, it->second.c_str()) == 0)
+            for (hid_device_info *cur = enumHead; cur; cur = cur->next)
             {
-                stillPresent = true;
+                if (deviceKey(cur->vendor_id, cur->product_id) == it->first &&
+                    std::strcmp(cur->path, it->second.c_str()) == 0)
+                {
+                    stillPresent = true;
+                    break;
+                }
+            }
+            if (stillPresent)
+            {
                 break;
             }
         }
@@ -892,7 +1006,10 @@ std::vector<BatteryDevice> AulaHidProvider::readDevices()
         }
     }
 
-    hid_free_enumeration(enumHead);
+    for (hid_device_info *enumHead : enumHeads)
+    {
+        hid_free_enumeration(enumHead);
+    }
     LOG_VERBOSE_W(L"[HID] readDevices total = " + std::to_wstring(devices.size()));
     return devices;
 }
