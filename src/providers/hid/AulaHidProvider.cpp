@@ -1,4 +1,5 @@
 #include "AulaHidProvider.h"
+#include "HidApiLock.h"
 #include "util/Logger.h"
 
 #include <algorithm>
@@ -103,6 +104,10 @@ namespace
     // 操作进程堆），是历史上堆损坏崩溃（0xc0000374）的根因，故此处务必只取一次。
     std::wstring hidErrorString(hid_device *dev)
     {
+        if (!dev)
+        {
+            return L"unavailable";
+        }
         const wchar_t *msg = hid_error(dev); // 仅调用一次
         return std::wstring(msg ? msg : L"unknown");
     }
@@ -720,6 +725,8 @@ std::wstring AulaHidProvider::displayName() const
 
 std::vector<BatteryDevice> AulaHidProvider::readDevices()
 {
+    std::lock_guard<std::recursive_mutex> hidLock(hidApiMutex());
+
     std::vector<BatteryDevice> devices;
 
     // hid_init 幂等且线程安全；显式调用以确保跨线程首次使用前完成初始化。

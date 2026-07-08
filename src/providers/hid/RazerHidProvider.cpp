@@ -1,4 +1,5 @@
 #include "RazerHidProvider.h"
+#include "HidApiLock.h"
 #include "util/Logger.h"
 
 #include <algorithm>
@@ -163,6 +164,9 @@ std::wstring pathToWString(const char *path)
 // 操作进程堆），是历史上堆损坏崩溃（0xc0000374）的根因，故此处务必只取一次。
 std::wstring hidErrorString(hid_device *dev)
 {
+    if (!dev) {
+        return L"unavailable";
+    }
     const wchar_t *msg = hid_error(dev); // 仅调用一次
     return std::wstring(msg ? msg : L"unknown");
 }
@@ -322,6 +326,8 @@ std::wstring RazerHidProvider::displayName() const
 
 std::vector<BatteryDevice> RazerHidProvider::readDevices()
 {
+    std::lock_guard<std::recursive_mutex> hidLock(hidApiMutex());
+
     std::vector<BatteryDevice> devices;
 
     if (hid_init() != 0) {
