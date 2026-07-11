@@ -7,6 +7,7 @@
 #include "src/providers/hid/RazerHidProvider.h"
 #include "src/providers/hid/VgnHidProvider.h"
 #include "src/providers/xbox/XboxProvider.h"
+#include "src/rpc/RpcServer.h"
 #include "util/AppSettings.h"
 #include "util/Logger.h"
 #include "GeneratedAppVersion.h"
@@ -248,7 +249,44 @@ int main(int argc, char *argv[])
     manager.addProvider(std::make_unique<VgnHidProvider>());
     manager.start();
 
+    // —— WebSocket JSON-RPC Server ——
+    //
+    // 启动条件（任一即可）：
+    //   1. 设置页开启了 RpcEnabled（持久化在 QSettings）。
+    //   2. 命令行带 --websocket_server（本次强制启动，覆盖设置开关，不写盘）。
+    //
+    // 端口优先级：--port <N> > 设置中的 RpcPort > 默认 19211。
+    // host / token 始终取设置值（命令行不提供，如需可后续扩展）。
+    const QStringList args = QCoreApplication::arguments();
+    const bool cliStartServer =
+        args.contains(QStringLiteral("--websocket_server"), Qt::CaseInsensitive);
+    int cliPort = -1;
+    const int portIdx = args.indexOf(QStringLiteral("--port"));
+    if (portIdx >= 0 && portIdx + 1 < args.size()) {
+        bool ok = false;
+        const int parsed = args.at(portIdx + 1).toInt(&ok);
+        if (ok && parsed >= AppSettings::kMinRpcPort &&
+            parsed <= AppSettings::kMaxRpcPort) {
+            cliPort = parsed;
+        } else {
+            LOG_WARN_W(L"--port value invalid or out of range, ignored");
+        }
+    }
+
+    RpcServer *rpcServer = nullptr;
+    const bool wantServer = cliStartServer || AppSettings::rpcEnabled();
+    if (wantServer) {
+        rpcServer = new RpcServer(&manager, &a);
+        const QString host = AppSettings::rpcHost();
+        const int port = cliPort > 0 ? cliPort : AppSettings::rpcPort();
+        const QString token = AppSettings::rpcToken();
+        if (!rpcServer->start(host, port, token)) {
+            LOG_WARN_W(L"RpcServer failed to start (port may be in use)");
+        }
+    }
+
     MainWindow w(&manager);
+    w.setRpcServer(rpcServer);
 #ifdef Q_OS_WIN
     ShowMainWindowEventFilter showMainWindowEventFilter(&w, singleInstance.showMainWindowMessage());
     a.installNativeEventFilter(&showMainWindowEventFilter);

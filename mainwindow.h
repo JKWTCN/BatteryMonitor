@@ -17,6 +17,7 @@ class MainWindow;
 QT_END_NAMESPACE
 
 class BatteryManager;
+class RpcServer;
 class QSystemTrayIcon;
 class QAction;
 class QCheckBox;
@@ -38,6 +39,10 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(BatteryManager *manager, QWidget *parent = nullptr);
     ~MainWindow() override;
+
+    // 注入 WebSocket RPC Server（可选）。设置页的 WebSocket 开关据此启动/停止。
+    // 由 main.cpp 在构造后调用。
+    void setRpcServer(RpcServer *server);
 
     // 语言切换后由外部（main.cpp 的翻译控制器）调用，重填所有静态控件文本。
     void retranslateUi();
@@ -68,6 +73,12 @@ private slots:
     void onStaleRetentionChanged(int index);
     // 设置页「隐藏未配对 AirPods」复选框被切换。
     void onHideUnpairedAirPodsChanged(bool checked);
+    // 设置页「WebSocket 服务」启用复选框被切换。
+    void onRpcEnabledToggled(bool checked);
+    // 设置页 RPC 端口 / host / token 被修改。
+    void onRpcPortChanged(int value);
+    void onRpcHostEditingFinished();
+    void onRpcTokenEditingFinished();
     void onTrayActivated();
     void onToggleVisible();
     void onQuit();
@@ -172,6 +183,19 @@ private:
     QComboBox *m_staleRetentionCombo = nullptr;
     QCheckBox *m_startupCheck = nullptr;
     QCheckBox *m_hideUnpairedAirPodsCheck = nullptr;
+
+    // —— 设置页 WebSocket RPC 行控件 ——
+    QLabel *m_rpcRowTitle = nullptr;
+    QCheckBox *m_rpcEnabledCheck = nullptr;
+    QLabel *m_rpcPortRowTitle = nullptr;
+    QSpinBox *m_rpcPortSpin = nullptr;
+    QLabel *m_rpcHostRowTitle = nullptr;
+    QLineEdit *m_rpcHostEdit = nullptr;
+    QLabel *m_rpcTokenRowTitle = nullptr;
+    QLineEdit *m_rpcTokenEdit = nullptr;
+    QLabel *m_rpcStatusValue = nullptr;
+
+    RpcServer *m_rpcServer = nullptr;
 
     QList<BatteryDevice> m_devices;
     QString m_currentDetailId;

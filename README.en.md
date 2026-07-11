@@ -55,6 +55,7 @@ Note: AULA / AJAZZ wired USB keyboard bodies are not included in the current HID
 - Start with Windows and minimize to tray
 - Light, dark, and system theme modes
 - Chinese UI support
+- Built-in WebSocket JSON-RPC interface for external tools like StreamDock and Home Assistant to read device battery data
 
 ## Current Read Methods
 
@@ -116,6 +117,26 @@ The settings page allows configuring:
 - Start with Windows
 - Stale cache retention time
 - Whether to hide unpaired AirPods
+- WebSocket service toggle, listen port, bind address, and authentication token
+
+## WebSocket API
+
+BatteryMonitor includes a built-in WebSocket JSON-RPC 2.0 server, disabled by default. Once enabled, external tools (such as StreamDock, Home Assistant, Rainmeter, or custom dashboards) can retrieve device battery snapshots, subscribe to real-time updates, trigger refreshes, and read/write global and per-device preferences via JSON-RPC.
+
+**Enabling the server:**
+
+- Toggle "WebSocket service" in the settings page (persisted, auto-restored on next launch). Port, bind address, and auth token can be configured on the same page.
+- Or start via command-line arguments (force-enabled for this session, not persisted):
+
+  ```text
+  BatteryMonitor.exe --websocket_server                  # uses the configured port, default 19211
+  BatteryMonitor.exe --websocket_server --port 8080      # overrides port for this session
+  BatteryMonitor.exe --minimized --websocket_server      # starts hidden to tray with the server
+  ```
+
+Listens on `ws://127.0.0.1:19211/` by default (localhost only, no auth required). For the full method list, data model, error codes, and interaction examples, see [docs/websocket-api-en.md](docs/websocket-api-en.md).
+
+A ready-to-use test page is also included at [docs/websocket-test.html](docs/websocket-test.html) — open it directly in a browser to connect to the server, call all methods, view real-time push and device details, with Chinese/English language switching.
 
 ## Project Structure
 
@@ -127,6 +148,7 @@ The settings page allows configuring:
 ├── src/providers/bluetooth          # Bluetooth / AirPods providers
 ├── src/providers/hid                # AULA / VGN / Razer HID providers
 ├── src/providers/xbox               # Xbox provider
+├── src/rpc                          # WebSocket JSON-RPC server
 ├── util                             # Settings, logging, version information
 ├── lang                             # Qt translation files
 ├── res                              # Icons and Qt resources

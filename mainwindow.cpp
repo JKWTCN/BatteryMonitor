@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 
 #include "src/core/BatteryManager.h"
+#include "src/rpc/RpcServer.h"
 #include "util/AppSettings.h"
 #include "util/DeviceSettings.h"
 
@@ -413,6 +414,27 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+void MainWindow::setRpcServer(RpcServer *server)
+{
+    m_rpcServer = server;
+    // 刷新一次状态文字（监听地址 / 未启用）。
+    if (m_rpcStatusValue) {
+        if (m_rpcServer && m_rpcServer->isListening()) {
+            m_rpcStatusValue->setText(
+                QStringLiteral("%1:%2").arg(m_rpcServer->listenHost())
+                                       .arg(m_rpcServer->listenPort()));
+        } else {
+            m_rpcStatusValue->setText(tr("Not running"));
+        }
+    }
+    // 同步勾选框：若 server 已由 --websocket_server 命令行启动，
+    // 则勾选并禁用（避免用户误以为关掉就能停）。
+    if (m_rpcServer && m_rpcServer->isListening()) {
+        const QSignalBlocker b(m_rpcEnabledCheck);
+        m_rpcEnabledCheck->setChecked(true);
+    }
+}
+
 void MainWindow::setupPages()
 {
     auto *table = ui->deviceTable;
@@ -672,6 +694,33 @@ void MainWindow::setupPages()
     addInfoRow(settingsGroupLayout, m_staleRetentionRowTitle, m_staleRetentionCombo);
     addInfoRow(settingsGroupLayout, m_hideUnpairedAirPodsRowTitle, m_hideUnpairedAirPodsCheck);
     addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
+
+    // —— WebSocket RPC 服务配置 ——
+    m_rpcRowTitle = new QLabel(tr("WebSocket service"));
+    m_rpcEnabledCheck = new QCheckBox();
+    m_rpcEnabledCheck->setObjectName(QStringLiteral("hideUnpairedAirPodsCheck"));
+    m_rpcPortRowTitle = new QLabel(tr("WebSocket port"));
+    m_rpcPortSpin = new QSpinBox();
+    m_rpcPortSpin->setObjectName(QStringLiteral("settingsCombo"));
+    m_rpcPortSpin->setRange(AppSettings::kMinRpcPort, AppSettings::kMaxRpcPort);
+    m_rpcPortSpin->setValue(AppSettings::kDefaultRpcPort);
+    m_rpcHostRowTitle = new QLabel(tr("WebSocket host"));
+    m_rpcHostEdit = new QLineEdit();
+    m_rpcHostEdit->setObjectName(QStringLiteral("settingsCombo"));
+    m_rpcHostEdit->setPlaceholderText(QStringLiteral("127.0.0.1"));
+    m_rpcTokenRowTitle = new QLabel(tr("WebSocket token"));
+    m_rpcTokenEdit = new QLineEdit();
+    m_rpcTokenEdit->setObjectName(QStringLiteral("settingsCombo"));
+    m_rpcTokenEdit->setPlaceholderText(tr("(no auth)"));
+    m_rpcTokenEdit->setEchoMode(QLineEdit::Password);
+    m_rpcStatusValue = makeValueLabel();
+    m_rpcStatusValue->setObjectName(QStringLiteral("rowValue"));
+    addInfoRow(settingsGroupLayout, m_rpcRowTitle, m_rpcEnabledCheck);
+    addInfoRow(settingsGroupLayout, m_rpcPortRowTitle, m_rpcPortSpin);
+    addInfoRow(settingsGroupLayout, m_rpcHostRowTitle, m_rpcHostEdit);
+    addInfoRow(settingsGroupLayout, m_rpcTokenRowTitle, m_rpcTokenEdit);
+    addInfoRow(settingsGroupLayout, new QLabel(tr("Service status")), m_rpcStatusValue);
+
     addInfoRow(settingsGroupLayout, m_versionRowTitle, m_versionValue);
     addInfoRow(settingsGroupLayout, m_projectRowTitle, m_projectLinkValue);
     settingsLayout->addWidget(settingsGroup);
@@ -794,6 +843,15 @@ void MainWindow::setupConnections()
             this, &MainWindow::onHideUnpairedAirPodsChanged);
     connect(m_startupCheck, &QCheckBox::toggled,
             this, &MainWindow::onStartupToggled);
+    // WebSocket RPC 行。
+    connect(m_rpcEnabledCheck, &QCheckBox::toggled,
+            this, &MainWindow::onRpcEnabledToggled);
+    connect(m_rpcPortSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, &MainWindow::onRpcPortChanged);
+    connect(m_rpcHostEdit, &QLineEdit::editingFinished,
+            this, &MainWindow::onRpcHostEditingFinished);
+    connect(m_rpcTokenEdit, &QLineEdit::editingFinished,
+            this, &MainWindow::onRpcTokenEditingFinished);
     connect(ui->deviceTable, &QTableWidget::cellDoubleClicked,
             this, &MainWindow::showDeviceDetail);
 
@@ -906,6 +964,70 @@ void MainWindow::onHideUnpairedAirPodsChanged(bool checked)
     AppSettings::setHideUnpairedAirPods(checked);
     if (m_manager) {
         m_manager->refreshNow();
+    }
+}
+
+void MainWindow::onRpcEnabledToggled(bool checked)
+{
+    AppSettings::setRpcEnabled(checked);
+    if (checked) {
+        // 启动：若已在监听（--websocket_server 启动）则仅刷新状态。
+        if (m_rpcServer && m_rpcServer->isListening()) {
+            setRpcServer(m_rpcServer);
+            return;
+        }
+        if (!m_rpcServer) {
+            m_rpcServer = new RpcServer(m_manager, this);
+        }
+        const QString host = m_rpcHostEdit->text().trimmed().isEmpty()
+                                 ? QString::fromLatin1(AppSettings::kDefaultRpcHost)
+                                 : m_rpcHostEdit->text().trimmed();
+        const QString token = m_rpcTokenEdit->text();
+        if (!m_rpcServer->start(host, m_rpcPortSpin->value(), token)) {
+            QMessageBox::warning(this, tr("Battery Monitor"),
+                                 tr("Failed to start WebSocket service. "
+                                    "The port may be in use."));
+            const QSignalBlocker b(m_rpcEnabledCheck);
+            m_rpcEnabledCheck->setChecked(false);
+            AppSettings::setRpcEnabled(false);
+        }
+    } else {
+        // 停止。
+        if (m_rpcServer) {
+            m_rpcServer->stop();
+        }
+    }
+    setRpcServer(m_rpcServer);
+}
+
+void MainWindow::onRpcPortChanged(int value)
+{
+    AppSettings::setRpcPort(value);
+    // 端口改动需要重启 Server 才生效。
+    if (m_rpcServer && m_rpcServer->isListening()) {
+        m_rpcServer->stop();
+        onRpcEnabledToggled(true);
+    }
+}
+
+void MainWindow::onRpcHostEditingFinished()
+{
+    const QString host = m_rpcHostEdit->text().trimmed();
+    AppSettings::setRpcHost(host.isEmpty()
+                                ? QString::fromLatin1(AppSettings::kDefaultRpcHost)
+                                : host);
+    if (m_rpcServer && m_rpcServer->isListening()) {
+        m_rpcServer->stop();
+        onRpcEnabledToggled(true);
+    }
+}
+
+void MainWindow::onRpcTokenEditingFinished()
+{
+    AppSettings::setRpcToken(m_rpcTokenEdit->text());
+    if (m_rpcServer && m_rpcServer->isListening()) {
+        m_rpcServer->stop();
+        onRpcEnabledToggled(true);
     }
 }
 
@@ -1152,6 +1274,11 @@ void MainWindow::loadSettingsIntoUi()
     const QSignalBlocker b4(m_startupCheck);
     const QSignalBlocker b5(m_staleRetentionCombo);
     const QSignalBlocker b6(m_hideUnpairedAirPodsCheck);
+    const QSignalBlocker b7(m_rpcEnabledCheck);
+    const QSignalBlocker b8(m_rpcPortSpin);
+    // QLineEdit 没有同名的阻塞器，用 blockSignals 即可。
+    const bool hostBlocked = m_rpcHostEdit->blockSignals(true);
+    const bool tokenBlocked = m_rpcTokenEdit->blockSignals(true);
 
     m_intervalCombo->setCurrentIndex(intervalIndex(AppSettings::refreshInterval()));
 
@@ -1173,6 +1300,14 @@ void MainWindow::loadSettingsIntoUi()
 
     // 自启状态直接读注册表，与任务管理器显示保持一致。
     m_startupCheck->setChecked(AppSettings::startupAutoStart());
+
+    // WebSocket RPC 行。
+    m_rpcEnabledCheck->setChecked(AppSettings::rpcEnabled());
+    m_rpcPortSpin->setValue(AppSettings::rpcPort());
+    m_rpcHostEdit->setText(AppSettings::rpcHost());
+    m_rpcTokenEdit->setText(AppSettings::rpcToken());
+    m_rpcHostEdit->blockSignals(hostBlocked);
+    m_rpcTokenEdit->blockSignals(tokenBlocked);
 
     // 让 manager 同步到持久化的间隔与粘性缓存窗口。
     if (m_manager) {
@@ -1242,6 +1377,20 @@ void MainWindow::retranslateUi()
     if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
     if (m_staleRetentionRowTitle) m_staleRetentionRowTitle->setText(tr("Stale retention"));
     if (m_hideUnpairedAirPodsRowTitle) m_hideUnpairedAirPodsRowTitle->setText(tr("Hide unpaired AirPods"));
+    if (m_rpcRowTitle) m_rpcRowTitle->setText(tr("WebSocket service"));
+    if (m_rpcPortRowTitle) m_rpcPortRowTitle->setText(tr("WebSocket port"));
+    if (m_rpcHostRowTitle) m_rpcHostRowTitle->setText(tr("WebSocket host"));
+    if (m_rpcTokenRowTitle) m_rpcTokenRowTitle->setText(tr("WebSocket token"));
+    if (m_rpcStatusValue) {
+        if (m_rpcServer && m_rpcServer->isListening()) {
+            m_rpcStatusValue->setText(
+                QStringLiteral("%1:%2").arg(m_rpcServer->listenHost())
+                                       .arg(m_rpcServer->listenPort()));
+        } else {
+            m_rpcStatusValue->setText(tr("Not running"));
+        }
+    }
+    if (m_rpcTokenEdit) m_rpcTokenEdit->setPlaceholderText(tr("(no auth)"));
     if (m_versionRowTitle) m_versionRowTitle->setText(tr("Version"));
     if (m_versionValue) m_versionValue->setText(QCoreApplication::applicationVersion());
     if (m_projectRowTitle) m_projectRowTitle->setText(tr("Project"));

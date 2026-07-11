@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="title">BatteryMonitor — WebSocket RPC Test Console</title>
+<style>
+  :root {
+    --bg: #1c1c1e; --surface: #2c2c2e; --surface2: #242426;
+    --text: #f5f5f7; --secondary: #a1a1a6; --border: #3a3a3c;
+    --accent: #0a84ff; --green: #30d158; --orange: #ff9f0a; --red: #ff453a;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px;
+    display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 18px; margin-bottom: 12px; }
+  h2 { font-size: 14px; color: var(--secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; overflow: auto;
+  }
+  label { display: block; color: var(--secondary); font-size: 12px; margin: 8px 0 4px; }
+  input, select, button {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: 13px; width: 100%;
+    font-family: inherit;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+  button {
+    cursor: pointer; font-weight: 600; transition: filter .15s; width: auto;
+  }
+  button:hover { filter: brightness(1.15); }
+  button:active { filter: brightness(.9); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-danger { background: var(--red); border-color: var(--red); color: #fff; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .dot-on { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot-off { background: var(--red); }
+  .dot-pend { background: var(--orange); }
+  #log {
+    background: #0d0d0e; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px; font-family: "Cascadia Code", "Consolas", monospace;
+    font-size: 12px; line-height: 1.6; overflow: auto; max-height: 260px;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .log-in { color: var(--green); }
+  .log-out { color: var(--orange); }
+  .log-err { color: var(--red); }
+  .log-info { color: var(--secondary); }
+  .log-event { color: var(--accent); font-weight: bold; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--secondary); font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--surface2); font-size: 13px; }
+  .battery { font-weight: 700; font-size: 16px; }
+  .bat-full { color: var(--green); }
+  .bat-medium { color: var(--green); }
+  .bat-low { color: var(--orange); }
+  .bat-empty { color: var(--red); }
+  .bat-unknown { color: var(--secondary); }
+  .badge {
+    display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    margin-left: 4px; font-weight: 600;
+  }
+  .badge-charging { background: var(--green); color: #000; }
+  .badge-wired { background: var(--orange); color: #000; }
+  .badge-stale { background: var(--secondary); color: #000; }
+  .badge-offline { background: var(--red); color: #fff; }
+  .section-divider { border-top: 1px solid var(--border); margin: 16px 0; }
+  .right-col { display: flex; flex-direction: column; gap: 16px; }
+  .device-detail { font-size: 12px; color: var(--secondary); margin-top: 4px; }
+  .clearfix::after { content: ""; display: table; clear: both; }
+  #methodSelect { font-family: monospace; }
+  .airpods-triple { display: flex; gap: 12px; font-size: 11px; color: var(--secondary); }
+  .airpods-triple span { white-space: nowrap; }
+  /* 语言切换器 */
+  #langBar { position: fixed; top: 10px; right: 16px; z-index: 100; }
+  #langBar select {
+    width: auto; padding: 4px 8px; font-size: 12px;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<!-- 语言切换 -->
+<div id="langBar">
+  <select id="langSelect">
+    <option value="zh-CN">简体中文</option>
+    <option value="en">English</option>
+  </select>
+</div>
+
+<!-- ===================== 左栏：连接 + 操作 ===================== -->
+<div class="panel" style="max-height: calc(100vh - 32px);">
+
+  <h1>🔋 BatteryMonitor RPC</h1>
+
+  <!-- 连接区 -->
+  <h2 data-i18n="connection">连接</h2>
+  <div class="row" style="margin-bottom: 8px;">
+    <span><span id="connDot" class="status-dot dot-off"></span><span id="connText" data-i18n="disconnected">未连接</span></span>
+  </div>
+  <label data-i18n="address">地址</label>
+  <div class="row">
+    <select id="scheme" style="flex:0 0 50px;">
+      <option value="ws">ws</option>
+    </select>
+    <span style="flex:0 0 auto;color:var(--secondary)">://</span>
+    <input id="host" value="127.0.0.1" placeholder="127.0.0.1">
+    <span style="flex:0 0 auto;color:var(--secondary)">:</span>
+    <input id="port" value="19211" style="flex:0 0 70px;" type="number">
+  </div>
+  <label data-i18n="tokenLabel">Token（可选，留空 = 无鉴权）</label>
+  <input id="token" type="password" data-i18n-ph="tokenPlaceholder" placeholder="(no auth)">
+  <div class="grid2" style="margin-top: 10px;">
+    <button id="btnConnect" class="btn-primary" data-i18n="connect">连接</button>
+    <button id="btnDisconnect" class="btn-danger" disabled data-i18n="disconnect">断开</button>
+  </div>
+
+  <div class="section-divider"></div>
+
+  <!-- 快捷操作 -->
+  <h2 data-i18n="quickActions">快捷操作</h2>
+  <div class="grid2" style="margin-bottom: 8px;">
+    <button class="btn-sm" data-action="ping">system.ping</button>
+    <button class="btn-sm" data-action="info">system.getInfo</button>
+  </div>
+  <div class="grid2" style="margin-bottom: 8px;">
+    <button class="btn-sm" data-action="list">devices.list</button>
+    <button class="btn-sm" data-action="refresh">refresh.now</button>
+  </div>
+  <div class="grid2" style="margin-bottom: 8px;">
+    <button class="btn-sm" data-action="appget">settings.app.get</button>
+    <button class="btn-sm" data-action="subscribe">devices.subscribe</button>
+  </div>
+  <div class="grid2">
+    <button class="btn-sm" data-action="unsubscribe">devices.unsubscribe</button>
+    <button class="btn-sm btn-danger" data-action="clearLog" data-i18n="clearLog">清空日志</button>
+  </div>
+
+  <div class="section-divider"></div>
+
+  <!-- 手动 RPC -->
+  <h2 data-i18n="manualRpc">手动 JSON-RPC</h2>
+  <label data-i18n="methodName">方法名</label>
+  <select id="methodSelect">
+    <option>system.ping</option>
+    <option>system.getInfo</option>
+    <option>devices.list</option>
+    <option>devices.get</option>
+    <option>devices.subscribe</option>
+    <option>devices.unsubscribe</option>
+    <option>refresh.now</option>
+    <option>settings.app.get</option>
+    <option>settings.app.set</option>
+    <option>settings.device.get</option>
+    <option>settings.device.set</option>
+  </select>
+  <label data-i18n="paramsLabel">params（JSON 对象）</label>
+  <input id="paramsInput" placeholder='{"id":"XInput_0"}' style="font-family:monospace;font-size:12px">
+  <button id="btnSend" class="btn-primary btn-sm" style="margin-top:8px;width:100%;" data-i18n="sendRequest">发送请求</button>
+
+  <div class="section-divider"></div>
+
+  <!-- 日志 -->
+  <h2 data-i18n="messageLog">消息日志</h2>
+  <div id="log"></div>
+
+</div>
+
+<!-- ===================== 右栏：设备表 + 详情 ===================== -->
+<div class="right-col">
+
+  <!-- 设备列表 -->
+  <div class="panel">
+    <div class="clearfix">
+      <h2 style="float:left;" data-i18n="deviceList">设备列表</h2>
+      <span style="float:right;color:var(--secondary);font-size:12px;margin-top:2px;">
+        <span data-i18n="updatedAt">更新于</span>: <span id="updatedAt">—</span>
+        <span data-i18n="totalCount">｜ 共</span> <span id="deviceCount">0</span> <span data-i18n="devicesUnit">台</span>
+      </span>
+    </div>
+    <table id="deviceTable">
+      <thead>
+        <tr>
+          <th data-i18n="colName">名称</th>
+          <th data-i18n="colBattery">电量</th>
+          <th data-i18n="colType">类型</th>
+          <th data-i18n="colStatus">状态</th>
+        </tr>
+      </thead>
+      <tbody id="deviceBody">
+        <tr><td colspan="4" style="color:var(--secondary);text-align:center;padding:20px;" data-i18n="emptyHint">
+          点击「devices.list」或「devices.subscribe」获取设备数据
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 选中设备详情 -->
+  <div class="panel" id="detailPanel" style="display:none;">
+    <h2 data-i18n="deviceDetail">设备详情</h2>
+    <div id="detailContent"></div>
+    <div class="section-divider"></div>
+    <h2 data-i18n="deviceSettings">设备设置</h2>
+    <div id="deviceSettingsForm"></div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================================
+// 国际化（i18n）
+// ============================================================================
+const I18N = {
+  'zh-CN': {
+    title: 'BatteryMonitor — WebSocket RPC 测试台',
+    connection: '连接',
+    disconnected: '未连接',
+    connecting: '连接中…',
+    connected: '已连接',
+    address: '地址',
+    tokenLabel: 'Token（可选，留空 = 无鉴权）',
+    tokenPlaceholder: '(无鉴权)',
+    connect: '连接',
+    disconnect: '断开',
+    quickActions: '快捷操作',
+    clearLog: '清空日志',
+    manualRpc: '手动 JSON-RPC',
+    methodName: '方法名',
+    paramsLabel: 'params（JSON 对象）',
+    sendRequest: '发送请求',
+    messageLog: '消息日志',
+    deviceList: '设备列表',
+    updatedAt: '更新于',
+    totalCount: '｜ 共',
+    devicesUnit: '台',
+    colName: '名称',
+    colBattery: '电量',
+    colType: '类型',
+    colStatus: '状态',
+    emptyHint: '点击「devices.list」或「devices.subscribe」获取设备数据',
+    deviceDetail: '设备详情',
+    deviceSettings: '设备设置',
+    noDevices: '无设备',
+    unnamed: '(未命名)',
+    online: '在线',
+    offline: '离线',
+    charging: '充电中',
+    wired: '有线',
+    cached: '缓存',
+    // 设备详情字段
+    detailId: 'ID',
+    detailName: '名称',
+    detailAlias: '别名',
+    detailDisplayName: '显示名',
+    detailType: '类型',
+    detailBattery: '电量',
+    detailLevel: '档位',
+    detailLrc: '左/右/盒',
+    detailCharging: '充电中',
+    detailPaired: '已配对',
+    detailWired: '有线',
+    detailConnected: '已连接',
+    detailStale: '缓存值',
+    detailLastSeen: '上次见到',
+    // 设备设置表单
+    setAlias: '别名',
+    setAliasPh: '(无)',
+    setTray: '显示到托盘',
+    setAlert: '低电量提醒',
+    setThreshold: '低电量阈值',
+    setPolicy: '提醒策略',
+    setKeep: '永久缓存',
+    setSave: '保存设备设置',
+    // battery level 文字
+    batEmpty: '空', batLow: '低', batMedium: '中', batFull: '满', batUnknown: '?',
+    // airpods
+    airLeft: '左', airRight: '右', airCase: '盒',
+    // type
+    typeBluetooth: '蓝牙', typeXbox: 'Xbox', typeHid: 'HID',
+    // alert policy 下拉
+    policyOnce: '仅一次', policyAlways: '每次刷新',
+    policy5min: '每 5 分钟', policy15min: '每 15 分钟',
+    policy30min: '每 30 分钟', policy60min: '每 60 分钟',
+    // 日志消息
+    logReady: 'BatteryMonitor WebSocket RPC 测试台已就绪',
+    logAppSettings: '应用设置',
+    logHint: '提示：先在 BatteryMonitor 设置中开启「WebSocket 服务」，或用 --websocket_server 启动',
+    logConnFail: '连接失败',
+    logConnErr: '❌ 连接错误',
+    logConnOk: '✅ 连接成功',
+    logConnecting: '连接',
+    logAuthOk: '鉴权成功',
+    logAuthFail: '鉴权失败',
+    logNotJson: '收到非 JSON',
+    logConnClosed: '连接关闭',
+    logWsNotConnected: 'WebSocket 未连接',
+    logRefreshDone: '刷新完成 ✅',
+    logSubscribed: '已订阅 ✅',
+    logUnsubscribed: '已取消订阅',
+    logSettingsSaved: '设备设置已保存 ✅',
+    logSaveFail: '保存失败',
+    logReadSettingsFail: '读取设备设置失败',
+    logParamsParseFail: 'params JSON 解析失败',
+    // 动态模板
+    tplUpdatedAt: '更新于',
+  },
+  'en': {
+    title: 'BatteryMonitor — WebSocket RPC Test Console',
+    connection: 'Connection',
+    disconnected: 'Disconnected',
+    connecting: 'Connecting…',
+    connected: 'Connected',
+    address: 'Address',
+    tokenLabel: 'Token (optional, empty = no auth)',
+    tokenPlaceholder: '(no auth)',
+    connect: 'Connect',
+    disconnect: 'Disconnect',
+    quickActions: 'Quick Actions',
+    clearLog: 'Clear Log',
+    manualRpc: 'Manual JSON-RPC',
+    methodName: 'Method',
+    paramsLabel: 'params (JSON object)',
+    sendRequest: 'Send Request',
+    messageLog: 'Message Log',
+    deviceList: 'Devices',
+    updatedAt: 'Updated',
+    totalCount: '| Count',
+    devicesUnit: '',
+    colName: 'Name',
+    colBattery: 'Battery',
+    colType: 'Type',
+    colStatus: 'Status',
+    emptyHint: 'Click "devices.list" or "devices.subscribe" to fetch device data',
+    deviceDetail: 'Device Details',
+    deviceSettings: 'Device Settings',
+    noDevices: 'No devices',
+    unnamed: '(unnamed)',
+    online: 'Online',
+    offline: 'Offline',
+    charging: 'Charging',
+    wired: 'Wired',
+    cached: 'Cached',
+    detailId: 'ID',
+    detailName: 'Name',
+    detailAlias: 'Alias',
+    detailDisplayName: 'Display Name',
+    detailType: 'Type',
+    detailBattery: 'Battery',
+    detailLevel: 'Level',
+    detailLrc: 'L/R/Case',
+    detailCharging: 'Charging',
+    detailPaired: 'Paired',
+    detailWired: 'Wired',
+    detailConnected: 'Connected',
+    detailStale: 'Stale',
+    detailLastSeen: 'Last Seen',
+    setAlias: 'Alias',
+    setAliasPh: '(none)',
+    setTray: 'Show in tray',
+    setAlert: 'Low battery alert',
+    setThreshold: 'Low battery threshold',
+    setPolicy: 'Alert policy',
+    setKeep: 'Keep cached',
+    setSave: 'Save Device Settings',
+    batEmpty: 'Empty', batLow: 'Low', batMedium: 'Medium', batFull: 'Full', batUnknown: '?',
+    airLeft: 'L', airRight: 'R', airCase: 'Case',
+    typeBluetooth: 'Bluetooth', typeXbox: 'Xbox', typeHid: 'HID',
+    policyOnce: 'Once', policyAlways: 'Every refresh',
+    policy5min: 'Every 5 min', policy15min: 'Every 15 min',
+    policy30min: 'Every 30 min', policy60min: 'Every 60 min',
+    logReady: 'BatteryMonitor WebSocket RPC test console ready',
+    logAppSettings: 'App settings',
+    logHint: 'Tip: enable "WebSocket service" in BatteryMonitor Settings, or launch with --websocket_server',
+    logConnFail: 'Connection failed',
+    logConnErr: '❌ Connection error',
+    logConnOk: '✅ Connected',
+    logConnecting: 'Connecting',
+    logAuthOk: 'Authentication succeeded',
+    logAuthFail: 'Authentication failed',
+    logNotJson: 'Received non-JSON',
+    logConnClosed: 'Connection closed',
+    logWsNotConnected: 'WebSocket not connected',
+    logRefreshDone: 'Refresh complete ✅',
+    logSubscribed: 'Subscribed ✅',
+    logUnsubscribed: 'Unsubscribed',
+    logSettingsSaved: 'Device settings saved ✅',
+    logSaveFail: 'Save failed',
+    logReadSettingsFail: 'Failed to read device settings',
+    logParamsParseFail: 'params JSON parse failed',
+    tplUpdatedAt: 'Updated',
+  },
+};
+
+let currentLang = 'zh-CN';
+
+function t(key) {
+  return (I18N[currentLang] && I18N[currentLang][key]) || key;
+}
+
+function applyLang() {
+  // 静态元素：data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  // placeholder：data-i18n-ph
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  document.documentElement.lang = currentLang;
+  // 如果设备表已渲染，重渲染以更新动态文本
+  if (currentDevices.length > 0 || $('deviceBody').dataset.rendered) {
+    renderDeviceTable({ devices: currentDevices, updatedAt: parseInt($('updatedAt').dataset.ts || 0) });
+  }
+  // 如果详情面板打开，重渲染
+  if (selectedDeviceId) {
+    const dev = currentDevices.find(d => d.id === selectedDeviceId);
+    if (dev) renderDetail(dev);
+  }
+}
+
+function detectLang() {
+  // 优先 localStorage，其次浏览器语言，默认 zh-CN
+  const saved = localStorage.getItem('bm-test-lang');
+  if (saved && I18N[saved]) return saved;
+  const nav = navigator.language || 'zh-CN';
+  if (nav.startsWith('en')) return 'en';
+  return 'zh-CN';
+}
+
+// ============================================================================
+// 状态
+// ============================================================================
+let ws = null;
+let nextId = 1;
+let pendingRequests = new Map();   // id -> {resolve, reject}
+let currentDevices = [];            // 最新设备快照
+let selectedDeviceId = null;        // 当前选中查看详情的设备
+
+const $ = id => document.getElementById(id);
+const log = (msg, cls = 'log-info') => {
+  const el = $('log');
+  const time = new Date().toLocaleTimeString();
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = `[${time}] ${msg}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+};
+
+// ============================================================================
+// JSON-RPC 请求
+// ============================================================================
+function rpc(method, params = {}) {
+  return new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      reject(new Error(t('logWsNotConnected')));
+      return;
+    }
+    const id = nextId++;
+    const req = { jsonrpc: '2.0', method, params, id };
+    const text = JSON.stringify(req);
+    ws.send(text);
+    log(`→ ${method}  ${JSON.stringify(params)}`, 'log-out');
+    pendingRequests.set(id, { resolve, reject, method });
+  });
+}
+
+// ============================================================================
+// WebSocket 连接
+// ============================================================================
+function connect() {
+  const host = $('host').value.trim() || '127.0.0.1';
+  const port = $('port').value.trim() || '19211';
+  const token = $('token').value.trim();
+  let url = `ws://${host}:${port}/`;
+  if (token) url += `?token=${encodeURIComponent(token)}`;
+
+  $('connDot').className = 'status-dot dot-pend';
+  $('connText').textContent = t('connecting');
+  log(`${t('logConnecting')} ${url} …`);
+
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    log(`${t('logConnFail')}: ${e.message}`, 'log-err');
+    setConnState(false);
+    return;
+  }
+
+  ws.onopen = () => {
+    log(t('logConnOk'), 'log-info');
+    setConnState(true);
+    if (token) {
+      rpc('system.authorize', { token }).then(r => {
+        log(t('logAuthOk'), 'log-info');
+      }).catch(e => log(`${t('logAuthFail')}: ${e}`, 'log-err'));
+    }
+  };
+
+  ws.onmessage = ev => {
+    let obj;
+    try { obj = JSON.parse(ev.data); } catch (e) {
+      log(`${t('logNotJson')}: ${ev.data}`, 'log-err');
+      return;
+    }
+    handleIncoming(obj);
+  };
+
+  ws.onerror = () => {
+    log(t('logConnErr'), 'log-err');
+  };
+
+  ws.onclose = ev => {
+    log(`${t('logConnClosed')} (code=${ev.code}${ev.reason ? ', ' + ev.reason : ''})`, 'log-err');
+    setConnState(false);
+    pendingRequests.clear();
+  };
+}
+
+function disconnect() {
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+}
+
+function setConnState(connected) {
+  $('connDot').className = 'status-dot ' + (connected ? 'dot-on' : 'dot-off');
+  $('connText').textContent = connected ? t('connected') : t('disconnected');
+  $('btnConnect').disabled = connected;
+  $('btnDisconnect').disabled = !connected;
+}
+
+// ============================================================================
+// 处理收到的消息（响应 / 通知）
+// ============================================================================
+function handleIncoming(obj) {
+  if (obj.method !== undefined && obj.id === undefined) {
+    handleNotification(obj);
+    return;
+  }
+
+  if (obj.error) {
+    log(`← error ${obj.error.code}: ${obj.error.message}` +
+        (obj.error.data ? `  ${JSON.stringify(obj.error.data)}` : ''), 'log-err');
+  } else {
+    log(`← ${JSON.stringify(obj.result)}`, 'log-in');
+  }
+
+  const pending = pendingRequests.get(obj.id);
+  if (pending) {
+    pendingRequests.delete(obj.id);
+    if (obj.error) {
+      pending.reject(`${obj.error.code}: ${obj.error.message}`);
+    } else {
+      pending.resolve(obj.result);
+    }
+  }
+}
+
+function handleNotification(obj) {
+  log(`🔔 ${obj.method}`, 'log-event');
+
+  if (obj.method === 'devices.updated') {
+    const p = obj.params;
+    currentDevices = p.devices || [];
+    renderDeviceTable(p);
+    if (selectedDeviceId) {
+      const dev = currentDevices.find(d => d.id === selectedDeviceId);
+      if (dev) renderDetail(dev);
+    }
+  }
+}
+
+// ============================================================================
+// 设备表渲染
+// ============================================================================
+function batteryClass(level) {
+  return 'bat-' + (level || 'unknown');
+}
+
+function batteryText(dev) {
+  if (dev.percentage !== null && dev.percentage !== undefined) {
+    return dev.percentage + '%';
+  }
+  const map = {
+    empty: t('batEmpty'), low: t('batLow'), medium: t('batMedium'),
+    full: t('batFull'), unknown: t('batUnknown')
+  };
+  return map[dev.level] || '?';
+}
+
+function typeLabel(tp) {
+  const map = { bluetooth: t('typeBluetooth'), xbox: t('typeXbox'), hid: t('typeHid') };
+  return map[tp] || tp;
+}
+
+function statusBadges(dev) {
+  let html = '';
+  if (!dev.connected) html += `<span class="badge badge-offline">${t('offline')}</span>`;
+  if (dev.charging) html += `<span class="badge badge-charging">${t('charging')}</span>`;
+  if (dev.wired) html += `<span class="badge badge-wired">${t('wired')}</span>`;
+  if (dev.stale) html += `<span class="badge badge-stale">${t('cached')}</span>`;
+  if (dev.subType === 'airpods') html += '<span class="badge badge-stale">AirPods</span>';
+  return html || `<span style="color:var(--secondary)">${t('online')}</span>`;
+}
+
+function airpodsDetail(dev) {
+  if (dev.subType !== 'airpods') return '';
+  const fmt = v => (v === null || v === undefined) ? '—' : v + '%';
+  return `<div class="airpods-triple">
+    <span>${t('airLeft')} ${fmt(dev.leftPercent)}</span>
+    <span>${t('airRight')} ${fmt(dev.rightPercent)}</span>
+    <span>${t('airCase')} ${fmt(dev.casePercent)}</span>
+  </div>`;
+}
+
+function renderDeviceTable(data) {
+  const devices = (data && data.devices) || [];
+  $('deviceCount').textContent = devices.length;
+  const ts = (data && data.updatedAt) || 0;
+  $('updatedAt').dataset.ts = ts;
+  $('updatedAt').textContent = ts ? new Date(ts).toLocaleTimeString() : '—';
+  $('deviceBody').dataset.rendered = '1';
+
+  const tbody = $('deviceBody');
+  if (devices.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--secondary);text-align:center;padding:20px;">${t('noDevices')}</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = devices.map(dev => {
+    const name = dev.displayName || dev.name || t('unnamed');
+    return `<tr style="cursor:pointer;" onclick="selectDevice('${escapeId(dev.id)}')">
+      <td>
+        <div>${escapeHtml(name)}</div>
+        <div class="device-detail">${escapeHtml(dev.id).substring(0, 50)}…</div>
+      </td>
+      <td>
+        <span class="battery ${batteryClass(dev.level)}">${batteryText(dev)}</span>
+        ${airpodsDetail(dev)}
+      </td>
+      <td>${typeLabel(dev.type)}</td>
+      <td>${statusBadges(dev)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function escapeId(id) {
+  return id.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================================
+// 设备详情 + 设置
+// ============================================================================
+function selectDevice(id) {
+  selectedDeviceId = id;
+  const dev = currentDevices.find(d => d.id === id);
+  if (!dev) return;
+  renderDetail(dev);
+  loadDeviceSettings(id);
+}
+
+function renderDetail(dev) {
+  $('detailPanel').style.display = 'block';
+  const fmt = v => (v === null || v === undefined) ? '—' : v;
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--surface2);">
+    <span style="color:var(--secondary)">${k}</span><span style="text-align:right">${v}</span></div>`;
+
+  $('detailContent').innerHTML = `
+    ${row(t('detailId'), escapeHtml(dev.id))}
+    ${row(t('detailName'), escapeHtml(dev.name || '—'))}
+    ${row(t('detailAlias'), escapeHtml(dev.alias || '—'))}
+    ${row(t('detailDisplayName'), escapeHtml(dev.displayName || '—'))}
+    ${row(t('detailType'), `${typeLabel(dev.type)} / ${dev.subType}`)}
+    ${row(t('detailBattery'), `<span class="battery ${batteryClass(dev.level)}">${batteryText(dev)}</span>`)}
+    ${row(t('detailLevel'), dev.level || '—')}
+    ${dev.subType === 'airpods' ? row(t('detailLrc'), `${fmt(dev.leftPercent)} / ${fmt(dev.rightPercent)} / ${fmt(dev.casePercent)}`) : ''}
+    ${row(t('detailCharging'), dev.charging ? '✅' : '❌')}
+    ${row(t('detailPaired'), dev.paired ? '✅' : '❌')}
+    ${row(t('detailWired'), dev.wired ? '✅' : '❌')}
+    ${row(t('detailConnected'), dev.connected ? '✅' : '❌')}
+    ${row(t('detailStale'), dev.stale ? '✅' : '❌')}
+    ${row(t('detailLastSeen'), dev.lastSeen ? new Date(dev.lastSeen).toLocaleString() : '—')}
+  `;
+}
+
+async function loadDeviceSettings(id) {
+  try {
+    const r = await rpc('settings.device.get', { id });
+    renderDeviceSettingsForm(id, r);
+  } catch (e) {
+    $('deviceSettingsForm').innerHTML = `<div style="color:var(--red)">${t('logReadSettingsFail')}: ${e}</div>`;
+  }
+}
+
+function renderDeviceSettingsForm(id, s) {
+  $('deviceSettingsForm').innerHTML = `
+    <label>${t('setAlias')}</label>
+    <input id="dsAlias" value="${escapeHtml(s.alias || '')}" placeholder="${t('setAliasPh')}">
+    <label><input type="checkbox" id="dsTray" ${s.trayVisible ? 'checked' : ''} style="width:auto;margin-right:6px;">${t('setTray')}</label>
+    <label><input type="checkbox" id="dsAlert" ${s.alertEnabled ? 'checked' : ''} style="width:auto;margin-right:6px;">${t('setAlert')}</label>
+    <label>${t('setThreshold')}: <span id="dsThrVal">${s.lowBatteryThreshold}</span>%</label>
+    <input type="range" id="dsThreshold" min="1" max="100" value="${s.lowBatteryThreshold}" style="width:100%;" oninput="$('dsThrVal').textContent=this.value">
+    <label>${t('setPolicy')}</label>
+    <select id="dsPolicy">
+      <option value="once" ${s.alertPolicy==='once'?'selected':''}>${t('policyOnce')}</option>
+      <option value="always" ${s.alertPolicy==='always'?'selected':''}>${t('policyAlways')}</option>
+      <option value="5min" ${s.alertPolicy==='5min'?'selected':''}>${t('policy5min')}</option>
+      <option value="15min" ${s.alertPolicy==='15min'?'selected':''}>${t('policy15min')}</option>
+      <option value="30min" ${s.alertPolicy==='30min'?'selected':''}>${t('policy30min')}</option>
+      <option value="60min" ${s.alertPolicy==='60min'?'selected':''}>${t('policy60min')}</option>
+    </select>
+    <label><input type="checkbox" id="dsKeep" ${s.keepCachedForever ? 'checked' : ''} style="width:auto;margin-right:6px;">${t('setKeep')}</label>
+    <button class="btn-primary btn-sm" style="width:100%;margin-top:10px;" onclick="saveDeviceSettings('${escapeId(id)}')">${t('setSave')}</button>
+  `;
+}
+
+async function saveDeviceSettings(id) {
+  const params = {
+    id,
+    alias: $('dsAlias').value,
+    trayVisible: $('dsTray').checked,
+    alertEnabled: $('dsAlert').checked,
+    lowBatteryThreshold: parseInt($('dsThreshold').value),
+    alertPolicy: $('dsPolicy').value,
+    keepCachedForever: $('dsKeep').checked,
+  };
+  try {
+    const r = await rpc('settings.device.set', params);
+    log(t('logSettingsSaved'), 'log-info');
+    renderDeviceSettingsForm(id, r);
+  } catch (e) {
+    log(`${t('logSaveFail')}: ${e}`, 'log-err');
+    alert(`${t('logSaveFail')}: ` + e);
+  }
+}
+
+// ============================================================================
+// 快捷操作处理
+// ============================================================================
+document.querySelectorAll('[data-action]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const a = btn.dataset.action;
+    try {
+      switch (a) {
+        case 'ping': {
+          const r = await rpc('system.ping', { payload: 'hello' });
+          log(`pong: ${JSON.stringify(r)}`, 'log-info');
+          break;
+        }
+        case 'info': {
+          const r = await rpc('system.getInfo', {});
+          log(`info: version=${r.version}, api=${r.apiVersion}, uptime=${r.uptime}ms`, 'log-info');
+          break;
+        }
+        case 'list': {
+          const r = await rpc('devices.list', {});
+          currentDevices = r.devices || [];
+          renderDeviceTable(r);
+          break;
+        }
+        case 'refresh': {
+          const r = await rpc('refresh.now', { wait: true });
+          if (r.devices) {
+            currentDevices = r.devices;
+            renderDeviceTable({ devices: r.devices, updatedAt: r.updatedAt, count: r.devices.length });
+          }
+          log(t('logRefreshDone'), 'log-info');
+          break;
+        }
+        case 'appget': {
+          const r = await rpc('settings.app.get', {});
+          log(`${t('logAppSettings')}: ${JSON.stringify(r)}`, 'log-info');
+          break;
+        }
+        case 'subscribe': {
+          const r = await rpc('devices.subscribe', { events: ['devices.updated', 'refresh.completed'], immediate: true });
+          log(`${t('logSubscribed')} subscriptionId=${r.subscriptionId}`, 'log-info');
+          break;
+        }
+        case 'unsubscribe': {
+          const r = await rpc('devices.unsubscribe', {});
+          log(t('logUnsubscribed'), 'log-info');
+          break;
+        }
+        case 'clearLog': {
+          $('log').innerHTML = '';
+          break;
+        }
+      }
+    } catch (e) {
+      log(`❌ ${e}`, 'log-err');
+    }
+  });
+});
+
+// ============================================================================
+// 手动 RPC 发送
+// ============================================================================
+$('btnSend').addEventListener('click', async () => {
+  const method = $('methodSelect').value;
+  const paramsText = $('paramsInput').value.trim();
+  let params = {};
+  if (paramsText) {
+    try {
+      params = JSON.parse(paramsText);
+    } catch (e) {
+      log(t('logParamsParseFail') + ': ' + e.message, 'log-err');
+      return;
+    }
+  }
+  try {
+    const r = await rpc(method, params);
+    if (method === 'devices.list' && r.devices) {
+      currentDevices = r.devices;
+      renderDeviceTable(r);
+    }
+  } catch (e) {
+    log(`❌ ${e}`, 'log-err');
+  }
+});
+
+// 方法选择变化时自动填入示例 params
+$('methodSelect').addEventListener('change', () => {
+  const m = $('methodSelect').value;
+  const aliasExample = currentLang === 'en' ? 'My Gamepad' : '我的手柄';
+  const examples = {
+    'devices.get': '{"id":"XInput_0"}',
+    'refresh.now': '{"wait":true}',
+    'settings.app.set': '{"refreshIntervalMs":5000}',
+    'settings.device.get': '{"id":"XInput_0"}',
+    'settings.device.set': `{"id":"XInput_0","alias":"${aliasExample}","lowBatteryThreshold":15}`,
+    'devices.subscribe': '{"events":["devices.updated"],"immediate":true}',
+  };
+  $('paramsInput').value = examples[m] || '';
+});
+
+// ============================================================================
+// 语言切换
+// ============================================================================
+$('langSelect').addEventListener('change', () => {
+  currentLang = $('langSelect').value;
+  localStorage.setItem('bm-test-lang', currentLang);
+  applyLang();
+  // 重新触发 methodSelect change 以更新示例 params 中的本地化文本
+  $('methodSelect').dispatchEvent(new Event('change'));
+});
+
+// ============================================================================
+// 按钮绑定
+// ============================================================================
+$('btnConnect').addEventListener('click', connect);
+$('btnDisconnect').addEventListener('click', disconnect);
+
+// ============================================================================
+// 初始化
+// ============================================================================
+currentLang = detectLang();
+$('langSelect').value = currentLang;
+$('methodSelect').dispatchEvent(new Event('change'));  // 填入示例 params
+applyLang();
+
+log(t('logReady'), 'log-info');
+log(t('logHint'), 'log-info');
+</script>
+
+</body>
+</html>

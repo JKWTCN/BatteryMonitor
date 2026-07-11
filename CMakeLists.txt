@@ -5,12 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(APP_VERSION_MAJOR 1 CACHE STRING "BatteryMonitor major version")
-set(APP_VERSION_MINOR 0 CACHE STRING "BatteryMonitor minor version")
+set(APP_VERSION_MINOR 1 CACHE STRING "BatteryMonitor minor version")
 set(APP_VERSION_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(APP_VERSION_HEADER "${APP_VERSION_GENERATED_DIR}/GeneratedAppVersion.h")
 set(APP_VERSION_RC "${APP_VERSION_GENERATED_DIR}/app_version.rc")
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets LinguistTools)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets WebSockets LinguistTools)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 qt_standard_project_setup(I18N_SOURCE_LANGUAGE en)
@@ -66,6 +66,13 @@ qt_add_executable(BatteryMonitor
     src/core/IBatteryProvider.h
     src/core/BatteryManager.cpp
     src/core/BatteryManager.h
+    # WebSocket JSON-RPC Server（src/rpc/）。
+    src/rpc/DeviceJson.cpp
+    src/rpc/DeviceJson.h
+    src/rpc/JsonRpc.cpp
+    src/rpc/JsonRpc.h
+    src/rpc/RpcServer.cpp
+    src/rpc/RpcServer.h
     # 具体 Provider 实现：按传输方式分目录，新增传输方式在此追加。
     src/providers/bluetooth/BluetoothProvider.cpp
     src/providers/bluetooth/BluetoothProvider.h
@@ -125,6 +132,7 @@ target_link_libraries(BatteryMonitor
     PRIVATE
         Qt::Core
         Qt::Widgets
+        Qt6::WebSockets
 )
 
 if(WIN32)

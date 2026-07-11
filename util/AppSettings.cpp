@@ -76,6 +76,60 @@ void AppSettings::setHideUnpairedAirPods(bool hide)
     QSettings().setValue(kKeyHideUnpairedAirPods, hide);
 }
 
+// —— WebSocket JSON-RPC Server ——
+namespace
+{
+constexpr auto kKeyRpcEnabled = "RpcEnabled";
+constexpr auto kKeyRpcHost = "RpcHost";
+constexpr auto kKeyRpcPort = "RpcPort";
+constexpr auto kKeyRpcToken = "RpcToken";
+} // namespace
+
+bool AppSettings::rpcEnabled()
+{
+    return QSettings().value(kKeyRpcEnabled, kDefaultRpcEnabled).toBool();
+}
+
+void AppSettings::setRpcEnabled(bool enabled)
+{
+    QSettings().setValue(kKeyRpcEnabled, enabled);
+}
+
+QString AppSettings::rpcHost()
+{
+    return QSettings().value(kKeyRpcHost, QString::fromLatin1(kDefaultRpcHost))
+        .toString();
+}
+
+void AppSettings::setRpcHost(const QString &host)
+{
+    QSettings().setValue(kKeyRpcHost, host);
+}
+
+int AppSettings::rpcPort()
+{
+    const int port = QSettings().value(kKeyRpcPort, kDefaultRpcPort).toInt();
+    if (port < kMinRpcPort || port > kMaxRpcPort) {
+        return kDefaultRpcPort;
+    }
+    return port;
+}
+
+void AppSettings::setRpcPort(int port)
+{
+    QSettings().setValue(kKeyRpcPort, qBound(kMinRpcPort, port, kMaxRpcPort));
+}
+
+QString AppSettings::rpcToken()
+{
+    return QSettings().value(kKeyRpcToken).toString();
+}
+
+void AppSettings::setRpcToken(const QString &token)
+{
+    QSettings().setValue(kKeyRpcToken, token);
+}
+
 // —— 开机自启 ——
 //
 // Windows 上把自身路径写到 HKCU\Software\Microsoft\Windows\CurrentVersion\Run，

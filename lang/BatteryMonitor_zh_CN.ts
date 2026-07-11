@@ -391,5 +391,37 @@
         <source>Hide unpaired AirPods</source>
         <translation>隐藏未配对的 AirPods</translation>
     </message>
+    <message>
+        <source>WebSocket service</source>
+        <translation>WebSocket 服务</translation>
+    </message>
+    <message>
+        <source>WebSocket port</source>
+        <translation>WebSocket 端口</translation>
+    </message>
+    <message>
+        <source>WebSocket host</source>
+        <translation>WebSocket 监听地址</translation>
+    </message>
+    <message>
+        <source>WebSocket token</source>
+        <translation>WebSocket 令牌</translation>
+    </message>
+    <message>
+        <source>(no auth)</source>
+        <translation>（无鉴权）</translation>
+    </message>
+    <message>
+        <source>Service status</source>
+        <translation>服务状态</translation>
+    </message>
+    <message>
+        <source>Not running</source>
+        <translation>未运行</translation>
+    </message>
+    <message>
+        <source>Failed to start WebSocket service. The port may be in use.</source>
+        <translation>启动 WebSocket 服务失败，端口可能已被占用。</translation>
+    </message>
 </context>
 </TS>
