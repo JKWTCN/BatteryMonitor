@@ -23,6 +23,7 @@ Only the following devices have been tested so far:
 | AirPods 2                               | Apple Company ID`0x004C` / Model ID `0x200F`                          | Verified            |
 | Xbox controller                         | VID`0x045E`; PID depends on the exact model                             | Verified            |
 | Razer Basilisk X HyperSpeed + Dongle    | VID`0x1532` / PID `0x0083`                                            | Verified            |
+| Razer BlackWidow V4 Mini HyperSpeed (Wireless) | VID`0x1532` / PID `0x02BA`                                            | Verified            |
 
 ## Theoretically Supported Devices
 
