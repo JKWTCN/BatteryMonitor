@@ -28,10 +28,17 @@ constexpr uint8_t kCommandGetBattery = 0x80;
 constexpr uint8_t kCommandGetCharging = 0x84;
 constexpr uint8_t kBatteryDataSize = 0x02;
 
+// Mouse Dock Pro 等底座先查询配对设备，再读取在线鼠标的电量。
+constexpr uint8_t kCommandClassDevice = 0x00;
+constexpr uint8_t kCommandGetPairedDevices = 0xBF;
+constexpr uint8_t kPairedDevicesDataSize = 0x50;
+constexpr size_t kArgumentCapacity = 80;
+
 enum class RazerKind
 {
     Mouse,
     Keyboard,
+    Dock,
 };
 
 struct RazerDeviceEntry
@@ -52,6 +59,9 @@ constexpr int kWaitViperMs = 60;
 constexpr int kWaitAtherisMs = 400;
 
 constexpr RazerDeviceEntry kRazerDevices[] = {
+    // Razer Mouse Dock Pro：本身不是鼠标，通过 0x00/0xBF 查询挂接的配对鼠标。
+    // 用独立 transactionId(0xFF) 和较短的等待时间即可。
+    {0x00A4, L"Razer Mouse Dock Pro", RazerKind::Dock, 0xFF, kWaitDefaultMs, false, false},
     {0x001F, L"Razer Naga Epic", RazerKind::Mouse, 0xFF, kWaitDefaultMs, false, false},
     {0x0024, L"Razer Mamba 2012 (Wired)", RazerKind::Mouse, 0xFF, kWaitDefaultMs, false, true},
     {0x0025, L"Razer Mamba 2012 (Wireless)", RazerKind::Mouse, 0xFF, kWaitDefaultMs, false, false},
@@ -202,14 +212,15 @@ uint8_t calculateCrc(const std::vector<unsigned char> &payload)
     return crc;
 }
 
-std::vector<unsigned char> makeReport(uint8_t transactionId, uint8_t commandId)
+std::vector<unsigned char> makeReport(uint8_t transactionId, uint8_t commandClass,
+                                      uint8_t commandId, uint8_t dataSize)
 {
     std::vector<unsigned char> payload(kReportSize, 0);
     payload[0] = 0x00; // 新命令
     payload[1] = transactionId;
     payload[4] = 0x00; // 协议类型
-    payload[5] = kBatteryDataSize;
-    payload[6] = kCommandClassBattery;
+    payload[5] = dataSize;
+    payload[6] = commandClass;
     payload[7] = commandId;
     payload[88] = calculateCrc(payload);
     return payload;
@@ -232,9 +243,12 @@ bool responseMatches(const std::vector<unsigned char> &response,
 
 std::optional<std::vector<unsigned char>> sendReport(hid_device *dev,
                                                      const RazerDeviceEntry &entry,
-                                                     uint8_t commandId)
+                                                     uint8_t commandClass,
+                                                     uint8_t commandId,
+                                                     uint8_t dataSize)
 {
-    std::vector<unsigned char> request = makeReport(entry.transactionId, commandId);
+    std::vector<unsigned char> request =
+        makeReport(entry.transactionId, commandClass, commandId, dataSize);
 
     for (int retry = 0; retry < kMaxRetries; ++retry) {
         std::vector<unsigned char> out(kReportWithIdSize, 0);
@@ -298,7 +312,8 @@ std::optional<BatteryDevice> queryRazerDevice(hid_device *dev,
                                               const std::wstring &id,
                                               const std::wstring &name)
 {
-    auto batteryResp = sendReport(dev, entry, kCommandGetBattery);
+    auto batteryResp = sendReport(dev, entry, kCommandClassBattery,
+                                  kCommandGetBattery, kBatteryDataSize);
     if (!batteryResp || batteryResp->size() <= kArgumentOffset + 1) {
         return std::nullopt;
     }
@@ -306,7 +321,8 @@ std::optional<BatteryDevice> queryRazerDevice(hid_device *dev,
     const int percentage = percentageFromByte((*batteryResp)[kArgumentOffset + 1]);
     bool charging = false;
     if (!entry.chargingUnsupported) {
-        auto chargingResp = sendReport(dev, entry, kCommandGetCharging);
+        auto chargingResp = sendReport(dev, entry, kCommandClassBattery,
+                                       kCommandGetCharging, kBatteryDataSize);
         if (chargingResp && chargingResp->size() > kArgumentOffset + 1) {
             charging = (*chargingResp)[kArgumentOffset + 1] != 0;
         }
@@ -316,6 +332,129 @@ std::optional<BatteryDevice> queryRazerDevice(hid_device *dev,
                   L"% charging=" + (charging ? L"1" : L"0") +
                   L" kind=" + std::to_wstring(static_cast<int>(entry.kind)));
     return makeDevice(id, name, entry, percentage, charging);
+}
+
+// 解析 Mouse Dock Pro 配对设备响应（0x00/0xBF）。
+// 响应参数区第一字节为配对槽位数，每个槽位 3 字节：[online][pid_hi][pid_lo]。
+// pid == 0xFFFF 表示该槽位未配对。
+struct PairedSlot
+{
+    int index;
+    bool online;
+    uint16_t pid;
+    bool paired;
+};
+
+std::vector<PairedSlot> parsePairedSlots(const std::vector<unsigned char> &response)
+{
+    std::vector<PairedSlot> slots;
+    if (response.size() <= kArgumentOffset) {
+        return slots;
+    }
+
+    const size_t dataSize =
+        std::min<size_t>(response[5], std::min<size_t>(kArgumentCapacity, response.size() - kArgumentOffset));
+    if (dataSize == 0) {
+        return slots;
+    }
+
+    const size_t slotCount = response[kArgumentOffset];
+    for (size_t i = 0; i < slotCount; ++i) {
+        const size_t off = kArgumentOffset + 1 + i * 3;
+        if (off + 3 > kArgumentOffset + dataSize) {
+            break;
+        }
+        const uint8_t online = response[off];
+        const uint16_t pid = (static_cast<uint16_t>(response[off + 1]) << 8) | response[off + 2];
+        slots.push_back(PairedSlot{static_cast<int>(i + 1), online != 0, pid, pid != 0xFFFF});
+    }
+    return slots;
+}
+
+// Mouse Dock Pro 查询：底座本身不持有电量，需先枚举挂接的鼠标，再读取在线鼠标电量。
+std::optional<BatteryDevice> queryDockDevice(hid_device *dev,
+                                             const RazerDeviceEntry &entry,
+                                             const std::wstring &id,
+                                             const std::wstring &name)
+{
+    auto pairedResp = sendReport(dev, entry, kCommandClassDevice,
+                                 kCommandGetPairedDevices, kPairedDevicesDataSize);
+    if (!pairedResp) {
+        return std::nullopt;
+    }
+
+    const auto slots = parsePairedSlots(*pairedResp);
+
+    int onlineCount = 0;
+    int pairedCount = 0;
+    for (const auto &slot : slots) {
+        if (slot.paired) {
+            ++pairedCount;
+            if (slot.online) {
+                ++onlineCount;
+            }
+        }
+    }
+
+    LOG_VERBOSE_W(L"[Razer] " + name + L" paired=" + std::to_wstring(pairedCount) +
+                  L" online=" + std::to_wstring(onlineCount));
+
+    // 未配对或全部离线时，仍发布一个在线的底座占位（电量为空、未充电），
+    // 这样 UI/缓存能看到底座连接状态；电量读不到，不掩盖其他设备。
+    if (onlineCount == 0) {
+        BatteryDevice device;
+        device.id = id;
+        device.name = name;
+        device.type = BatteryDevice::Type::Hid;
+        device.percentage = -1;
+        device.level = BatteryLevel::Unknown;
+        device.charging = false;
+        device.wired = entry.wired;
+        device.connected = true;
+        return device;
+    }
+
+    // 取第一个在线配对槽位读取电量。
+    for (const auto &slot : slots) {
+        if (!slot.paired || !slot.online) {
+            continue;
+        }
+
+        auto batteryResp = sendReport(dev, entry, kCommandClassBattery,
+                                      kCommandGetBattery, kBatteryDataSize);
+        if (!batteryResp || batteryResp->size() <= kArgumentOffset + 1) {
+            continue;
+        }
+
+        const int percentage = percentageFromByte((*batteryResp)[kArgumentOffset + 1]);
+
+        bool charging = false;
+        if (!entry.chargingUnsupported) {
+            auto chargingResp = sendReport(dev, entry, kCommandClassBattery,
+                                           kCommandGetCharging, kBatteryDataSize);
+            if (chargingResp && chargingResp->size() > kArgumentOffset + 1) {
+                charging = (*chargingResp)[kArgumentOffset + 1] != 0;
+            }
+        }
+
+        // 显示名按挂接鼠标的 PID 查 Razer 设备表，而不是底座的名字。
+        // 查不到时回退到 "Razer (PID 0xNNNN)" 形式，避免误显示为底座。
+        std::wstring displayName;
+        const RazerDeviceEntry *mouseEntry = findRazerEntry(slot.pid);
+        if (mouseEntry) {
+            displayName = mouseEntry->name;
+        } else {
+            displayName = L"Razer (PID 0x" + toHex4(slot.pid) + L")";
+        }
+
+        LOG_VERBOSE_W(L"[Razer] " + displayName + L" (slot " +
+                      std::to_wstring(slot.index) + L", pid 0x" + toHex4(slot.pid) +
+                      L") battery=" + std::to_wstring(percentage) +
+                      L"% charging=" + (charging ? L"1" : L"0"));
+        return makeDevice(id, displayName, entry, percentage, charging);
+    }
+
+    return std::nullopt;
 }
 } // namespace
 
@@ -402,7 +541,11 @@ std::vector<BatteryDevice> RazerHidProvider::readDevices()
 
         std::optional<BatteryDevice> result;
         try {
-            result = queryRazerDevice(dev, entry, id, name);
+            if (entry.kind == RazerKind::Dock) {
+                result = queryDockDevice(dev, entry, id, name);
+            } else {
+                result = queryRazerDevice(dev, entry, id, name);
+            }
         } catch (const std::exception &e) {
             LOG_ERR_W(L"[Razer]   query threw for " + name + L": " +
                       std::wstring(e.what(), e.what() + std::strlen(e.what())));
