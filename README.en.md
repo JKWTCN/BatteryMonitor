@@ -66,6 +66,7 @@ The project is split into several providers by device source:
 - `AirPodsProvider`: parses Apple Continuity BLE advertisements for AirPods / Beats left, right, and case battery levels
 - `XboxProvider`: reads Xbox controller battery through XInput, RawGameController, and Windows device properties
 - `AulaHidProvider`: reads AULA 2.4G dongle device battery through hidapi
+- `AsusRogHidProvider`: reads battery level and charging state from the ROG Strix Scope RX TKL Wireless Deluxe dongle through hidapi
 - `VgnHidProvider`: reads VGN / related-brand 2.4G dongle device battery through hidapi
 - `RazerHidProvider`: reads Razer mouse / keyboard battery through hidapi
 

@@ -109,7 +109,11 @@ QString batteryText(const BatteryDevice &device)
         return text;
     }
     if (device.percentage >= 0) {
-        return QString::number(device.percentage) + QLatin1Char('%');
+        QString text = QString::number(device.percentage) + QLatin1Char('%');
+        if (device.charging) {
+            text += QStringLiteral(" ⚡");
+        }
+        return text;
     }
     return levelText(device.level);
 }
@@ -129,6 +133,9 @@ QString statusText(const BatteryDevice &device)
     }
     if (!device.connected) {
         return MainWindow::tr("Disconnected");
+    }
+    if (device.charging) {
+        return MainWindow::tr("Charging");
     }
     return MainWindow::tr("Connected");
 }
