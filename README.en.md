@@ -24,6 +24,8 @@ Only the following devices have been tested so far:
 | Xbox controller                         | VID`0x045E`; PID depends on the exact model                             | Verified            |
 | Razer Basilisk X HyperSpeed + Dongle    | VID`0x1532` / PID `0x0083`                                            | Verified            |
 | Razer BlackWidow V4 Mini HyperSpeed (Wireless) | VID`0x1532` / PID `0x02BA`                                            | Verified            |
+| ROG Strix Scope RX TKL Wireless Deluxe + Dongle | VID`0x0B05` / PID `0x1A07`                                         | Verified            |
+| Razer Mouse Dock Pro + Razer Basilisk V3 Pro 35K (Wireless) | VID`0x1532` / PID `0x00A4` (dock) + PID `0x00CD` (mouse) | Verified |
 
 ## Theoretically Supported Devices
 
@@ -34,7 +36,6 @@ Besides the verified devices above, the code also contains adapter logic for som
 | AULA / AJAZZ 2.4G dongle devices                   | VID`0x0C45`, 2.4G dongle PID allowlist only                                         | Theoretical, unverified |
 | VGN / related-brand 2.4G dongle keyboards and mice | Multiple VID/PID values, built-in protocol families and partial VID fallback matching | Theoretical, unverified |
 | Razer mice / keyboards                             | VID`0x1532`, built-in PID table                                                     | Theoretical, unverified |
-| Razer Mouse Dock Pro                               | VID`0x1532` / PID `0x00A4`, reads battery of the mouse attached to the dock          | Theoretical, unverified |
 | AirPods / Beats series                             | Apple Company ID`0x004C`, built-in Model ID table                                   | Theoretical, unverified |
 | Xbox / XInput / Windows game controllers           | Microsoft VID`0x045E` or Windows controller interfaces                              | Theoretical, unverified |
 | Standard BLE Battery Service devices               | BLE GATT Battery Service, no fixed USB VID/PID                                        | Theoretical, unverified |

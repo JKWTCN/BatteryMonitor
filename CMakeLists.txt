@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(APP_VERSION_MAJOR 1 CACHE STRING "BatteryMonitor major version")
-set(APP_VERSION_MINOR 1 CACHE STRING "BatteryMonitor minor version")
+set(APP_VERSION_MINOR 2 CACHE STRING "BatteryMonitor minor version")
 set(APP_VERSION_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(APP_VERSION_HEADER "${APP_VERSION_GENERATED_DIR}/GeneratedAppVersion.h")
 set(APP_VERSION_RC "${APP_VERSION_GENERATED_DIR}/app_version.rc")
