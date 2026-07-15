@@ -58,6 +58,7 @@ Note: AULA / AJAZZ wired USB keyboard bodies are not included in the current HID
 - Light, dark, and system theme modes
 - Chinese UI support
 - Built-in WebSocket JSON-RPC interface for external tools like StreamDock and Home Assistant to read device battery data
+- Per-device battery history charts with CSV export for the selected time range
 
 ## Current Read Methods
 
@@ -112,6 +113,10 @@ Click a device to open its detail page and configure:
 - Low battery notification policy
 - Whether to keep the device cached forever
 
+The device details page also shows battery history for the last 24 hours, 7 days, 30 days,
+or all retained data. AirPods and Beats use separate left, right, and case series. The CSV
+button exports the current device and selected time range.
+
 The settings page allows configuring:
 
 - Refresh interval
@@ -121,6 +126,11 @@ The settings page allows configuring:
 - Stale cache retention time
 - Whether to hide unpaired AirPods
 - WebSocket service toggle, listen port, bind address, and authentication token
+- Battery history retention (30 days by default, with a permanent option)
+
+History is stored in `battery-history.sqlite` under the user application-data directory.
+Changes are recorded immediately and stable readings receive a five-minute heartbeat.
+CSV files use UTF-8 and can be opened directly by Excel or analysis scripts.
 
 ## WebSocket API
 

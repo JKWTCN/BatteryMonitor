@@ -17,6 +17,8 @@ class MainWindow;
 QT_END_NAMESPACE
 
 class BatteryManager;
+class BatteryHistoryChart;
+class BatteryHistoryStore;
 class RpcServer;
 class QSystemTrayIcon;
 class QAction;
@@ -37,7 +39,8 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    explicit MainWindow(BatteryManager *manager, QWidget *parent = nullptr);
+    explicit MainWindow(BatteryManager *manager, BatteryHistoryStore *historyStore,
+                        QWidget *parent = nullptr);
     ~MainWindow() override;
 
     // 注入 WebSocket RPC Server（可选）。设置页的 WebSocket 开关据此启动/停止。
@@ -94,6 +97,10 @@ private slots:
     void onDeviceAliasEditingFinished();
     // 设备信息页“永久缓存”复选框被切换。
     void onDeviceKeepCacheChanged(bool checked);
+    void onHistoryRangeChanged(int index);
+    void onExportHistoryClicked();
+    void onHistoryRetentionChanged(int index);
+    void onHistoryChanged(const QString &deviceId);
 
 private:
     void setupPages();
@@ -116,9 +123,13 @@ private:
     int intervalIndex(int msec) const;
     // 把粘性缓存保留秒数反查为 combo index。
     int staleRetentionIndex(int sec) const;
+    int historyRetentionIndex(int days) const;
+    qint64 historyRangeStartMsecs() const;
+    void refreshHistoryChart();
 
     Ui::MainWindow *ui;
     BatteryManager *m_manager;
+    BatteryHistoryStore *m_historyStore = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
     QAction *m_toggleAction = nullptr;
     QAction *m_refreshAction = nullptr;
@@ -162,6 +173,14 @@ private:
     QComboBox *m_deviceAlertPolicyCombo = nullptr;
     QCheckBox *m_deviceKeepCacheCheck = nullptr;
 
+    // —— 设备详情页历史图表 ——
+    QFrame *m_historyGroup = nullptr;
+    QLabel *m_historyTitleLabel = nullptr;
+    QComboBox *m_historyRangeCombo = nullptr;
+    QPushButton *m_exportHistoryButton = nullptr;
+    QLabel *m_historyLegendLabel = nullptr;
+    BatteryHistoryChart *m_historyChart = nullptr;
+
     // —— 设置页控件 ——
     QPushButton *m_refreshButton = nullptr;
     QPushButton *m_settingsButton = nullptr;
@@ -173,6 +192,7 @@ private:
     QLabel *m_startupRowTitle = nullptr;
     QLabel *m_staleRetentionRowTitle = nullptr;
     QLabel *m_hideUnpairedAirPodsRowTitle = nullptr;
+    QLabel *m_historyRetentionRowTitle = nullptr;
     QLabel *m_versionRowTitle = nullptr;
     QLabel *m_versionValue = nullptr;
     QLabel *m_projectRowTitle = nullptr;
@@ -183,6 +203,7 @@ private:
     QComboBox *m_staleRetentionCombo = nullptr;
     QCheckBox *m_startupCheck = nullptr;
     QCheckBox *m_hideUnpairedAirPodsCheck = nullptr;
+    QComboBox *m_historyRetentionCombo = nullptr;
 
     // —— 设置页 WebSocket RPC 行控件 ——
     QLabel *m_rpcRowTitle = nullptr;

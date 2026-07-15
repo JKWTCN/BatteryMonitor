@@ -2,6 +2,8 @@
 #include "ui_mainwindow.h"
 
 #include "src/core/BatteryManager.h"
+#include "src/history/BatteryHistoryChart.h"
+#include "src/history/BatteryHistoryStore.h"
 #include "src/rpc/RpcServer.h"
 #include "util/AppSettings.h"
 #include "util/DeviceSettings.h"
@@ -13,6 +15,7 @@
 #include <QColor>
 #include <QCoreApplication>
 #include <QEvent>
+#include <QFileDialog>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -26,6 +29,7 @@
 #include <QPainterPath>
 #include <QPalette>
 #include <QProgressBar>
+#include <QRegularExpression>
 #include <QPushButton>
 #include <QComboBox>
 #include <QDateTime>
@@ -41,6 +45,9 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 #include <QLabel>
+
+#include <algorithm>
+#include <utility>
 
 namespace
 {
@@ -274,6 +281,27 @@ int staleRetentionSecFromIndex(int index)
     }
 }
 
+int historyRetentionDaysFromIndex(int index)
+{
+    switch (index) {
+    case 0: return 7;
+    case 1: return 30;
+    case 2: return 90;
+    case 3: return 180;
+    case 4: return 365;
+    case 5: return 0; // 永久保留
+    default: return 30;
+    }
+}
+
+QString safeFileName(QString value)
+{
+    value.replace(QRegularExpression(QStringLiteral(R"([<>:"/\\|?*\x00-\x1F])")),
+                  QStringLiteral("_"));
+    value = value.trimmed();
+    return value.isEmpty() ? QStringLiteral("device") : value;
+}
+
 QString percentText(int value)
 {
     return value >= 0 ? QString::number(value) + QLatin1Char('%')
@@ -382,10 +410,12 @@ QFrame *makeInfoGroup()
 }
 } // namespace
 
-MainWindow::MainWindow(BatteryManager *manager, QWidget *parent)
+MainWindow::MainWindow(BatteryManager *manager, BatteryHistoryStore *historyStore,
+                       QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
     , m_manager(manager)
+    , m_historyStore(historyStore)
 {
     ui->setupUi(this);
     setupPages();
@@ -632,6 +662,29 @@ void MainWindow::setupPages()
     addInfoRow(deviceSettingsLayout, m_deviceAlertPolicyRowTitle, m_deviceAlertPolicyCombo);
     addInfoRow(deviceSettingsLayout, m_deviceKeepCacheRowTitle, m_deviceKeepCacheCheck);
     detailLayout->addWidget(m_deviceSettingsGroup);
+
+    // —— 电量历史图表 ——
+    m_historyGroup = makeInfoGroup();
+    auto *historyLayout = qobject_cast<QVBoxLayout *>(m_historyGroup->layout());
+    historyLayout->setContentsMargins(12, 12, 12, 12);
+    historyLayout->setSpacing(10);
+    auto *historyHeader = new QHBoxLayout();
+    m_historyTitleLabel = new QLabel(tr("Battery history"));
+    m_historyTitleLabel->setObjectName(QStringLiteral("rowTitle"));
+    m_historyRangeCombo = new QComboBox();
+    m_historyRangeCombo->setObjectName(QStringLiteral("settingsCombo"));
+    m_exportHistoryButton = new QPushButton(tr("Export CSV"));
+    historyHeader->addWidget(m_historyTitleLabel);
+    historyHeader->addStretch(1);
+    historyHeader->addWidget(m_historyRangeCombo);
+    historyHeader->addWidget(m_exportHistoryButton);
+    historyLayout->addLayout(historyHeader);
+    m_historyLegendLabel = new QLabel();
+    m_historyLegendLabel->setObjectName(QStringLiteral("listHint"));
+    historyLayout->addWidget(m_historyLegendLabel);
+    m_historyChart = new BatteryHistoryChart();
+    historyLayout->addWidget(m_historyChart);
+    detailLayout->addWidget(m_historyGroup);
     detailLayout->addStretch(1);
 
     m_detailScrollArea->setWidget(m_detailPage);
@@ -674,6 +727,7 @@ void MainWindow::setupPages()
     m_startupRowTitle = new QLabel(tr("Start with Windows"));
     m_staleRetentionRowTitle = new QLabel(tr("Stale retention"));
     m_hideUnpairedAirPodsRowTitle = new QLabel(tr("Hide unpaired AirPods"));
+    m_historyRetentionRowTitle = new QLabel(tr("History retention"));
     m_versionRowTitle = new QLabel(tr("Version"));
     m_versionValue = makeValueLabel();
     m_versionValue->setText(QCoreApplication::applicationVersion());
@@ -695,11 +749,14 @@ void MainWindow::setupPages()
     m_startupCheck->setObjectName(QStringLiteral("startupCheck"));
     m_hideUnpairedAirPodsCheck = new QCheckBox();
     m_hideUnpairedAirPodsCheck->setObjectName(QStringLiteral("hideUnpairedAirPodsCheck"));
+    m_historyRetentionCombo = new QComboBox();
+    m_historyRetentionCombo->setObjectName(QStringLiteral("settingsCombo"));
     addInfoRow(settingsGroupLayout, m_intervalRowTitle, m_intervalCombo);
     addInfoRow(settingsGroupLayout, m_languageRowTitle, m_languageCombo);
     addInfoRow(settingsGroupLayout, m_themeRowTitle, m_themeCombo);
     addInfoRow(settingsGroupLayout, m_staleRetentionRowTitle, m_staleRetentionCombo);
     addInfoRow(settingsGroupLayout, m_hideUnpairedAirPodsRowTitle, m_hideUnpairedAirPodsCheck);
+    addInfoRow(settingsGroupLayout, m_historyRetentionRowTitle, m_historyRetentionCombo);
     addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
 
     // —— WebSocket RPC 服务配置 ——
@@ -848,6 +905,8 @@ void MainWindow::setupConnections()
             this, &MainWindow::onStaleRetentionChanged);
     connect(m_hideUnpairedAirPodsCheck, &QCheckBox::toggled,
             this, &MainWindow::onHideUnpairedAirPodsChanged);
+    connect(m_historyRetentionCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onHistoryRetentionChanged);
     connect(m_startupCheck, &QCheckBox::toggled,
             this, &MainWindow::onStartupToggled);
     // WebSocket RPC 行。
@@ -877,6 +936,14 @@ void MainWindow::setupConnections()
             this, &MainWindow::onDeviceAliasEditingFinished);
     connect(m_deviceKeepCacheCheck, &QCheckBox::toggled,
             this, &MainWindow::onDeviceKeepCacheChanged);
+    connect(m_historyRangeCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &MainWindow::onHistoryRangeChanged);
+    connect(m_exportHistoryButton, &QPushButton::clicked,
+            this, &MainWindow::onExportHistoryClicked);
+    if (m_historyStore) {
+        connect(m_historyStore, &BatteryHistoryStore::historyChanged,
+                this, &MainWindow::onHistoryChanged);
+    }
 
     connect(m_tray, &QSystemTrayIcon::activated,
             this, [this](QSystemTrayIcon::ActivationReason reason) {
@@ -1257,6 +1324,19 @@ int MainWindow::staleRetentionIndex(int sec) const
     }
 }
 
+int MainWindow::historyRetentionIndex(int days) const
+{
+    switch (days) {
+    case 7: return 0;
+    case 30: return 1;
+    case 90: return 2;
+    case 180: return 3;
+    case 365: return 4;
+    case 0: return 5;
+    default: return 1;
+    }
+}
+
 QString MainWindow::deviceDisplayName(const BatteryDevice &device) const
 {
     const QString id = QString::fromStdWString(device.id);
@@ -1283,6 +1363,7 @@ void MainWindow::loadSettingsIntoUi()
     const QSignalBlocker b6(m_hideUnpairedAirPodsCheck);
     const QSignalBlocker b7(m_rpcEnabledCheck);
     const QSignalBlocker b8(m_rpcPortSpin);
+    const QSignalBlocker b9(m_historyRetentionCombo);
     // QLineEdit 没有同名的阻塞器，用 blockSignals 即可。
     const bool hostBlocked = m_rpcHostEdit->blockSignals(true);
     const bool tokenBlocked = m_rpcTokenEdit->blockSignals(true);
@@ -1304,6 +1385,8 @@ void MainWindow::loadSettingsIntoUi()
     m_staleRetentionCombo->setCurrentIndex(
         staleRetentionIndex(AppSettings::staleRetentionSec()));
     m_hideUnpairedAirPodsCheck->setChecked(AppSettings::hideUnpairedAirPods());
+    m_historyRetentionCombo->setCurrentIndex(
+        historyRetentionIndex(AppSettings::historyRetentionDays()));
 
     // 自启状态直接读注册表，与任务管理器显示保持一致。
     m_startupCheck->setChecked(AppSettings::startupAutoStart());
@@ -1368,6 +1451,28 @@ void MainWindow::retranslateCombos()
         m_staleRetentionCombo->setCurrentIndex(cur < 0 ? 2 : cur);
         m_staleRetentionCombo->blockSignals(false);
     }
+    if (m_historyRetentionCombo) {
+        const QSignalBlocker blocker(m_historyRetentionCombo);
+        const int cur = m_historyRetentionCombo->currentIndex();
+        m_historyRetentionCombo->clear();
+        m_historyRetentionCombo->addItem(tr("7 days"));
+        m_historyRetentionCombo->addItem(tr("30 days"));
+        m_historyRetentionCombo->addItem(tr("90 days"));
+        m_historyRetentionCombo->addItem(tr("180 days"));
+        m_historyRetentionCombo->addItem(tr("365 days"));
+        m_historyRetentionCombo->addItem(tr("Forever"));
+        m_historyRetentionCombo->setCurrentIndex(cur < 0 ? 1 : cur);
+    }
+    if (m_historyRangeCombo) {
+        const QSignalBlocker blocker(m_historyRangeCombo);
+        const int cur = m_historyRangeCombo->currentIndex();
+        m_historyRangeCombo->clear();
+        m_historyRangeCombo->addItem(tr("Last 24 hours"));
+        m_historyRangeCombo->addItem(tr("Last 7 days"));
+        m_historyRangeCombo->addItem(tr("Last 30 days"));
+        m_historyRangeCombo->addItem(tr("All history"));
+        m_historyRangeCombo->setCurrentIndex(cur < 0 ? 0 : cur);
+    }
 }
 
 void MainWindow::retranslateUi()
@@ -1384,6 +1489,9 @@ void MainWindow::retranslateUi()
     if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
     if (m_staleRetentionRowTitle) m_staleRetentionRowTitle->setText(tr("Stale retention"));
     if (m_hideUnpairedAirPodsRowTitle) m_hideUnpairedAirPodsRowTitle->setText(tr("Hide unpaired AirPods"));
+    if (m_historyRetentionRowTitle) m_historyRetentionRowTitle->setText(tr("History retention"));
+    if (m_historyTitleLabel) m_historyTitleLabel->setText(tr("Battery history"));
+    if (m_exportHistoryButton) m_exportHistoryButton->setText(tr("Export CSV"));
     if (m_rpcRowTitle) m_rpcRowTitle->setText(tr("WebSocket service"));
     if (m_rpcPortRowTitle) m_rpcPortRowTitle->setText(tr("WebSocket port"));
     if (m_rpcHostRowTitle) m_rpcHostRowTitle->setText(tr("WebSocket host"));
@@ -1402,6 +1510,7 @@ void MainWindow::retranslateUi()
     if (m_versionValue) m_versionValue->setText(QCoreApplication::applicationVersion());
     if (m_projectRowTitle) m_projectRowTitle->setText(tr("Project"));
     retranslateCombos();
+    refreshHistoryChart();
 
     // 托盘菜单 / 图标提示。
     if (m_toggleAction) m_toggleAction->setText(isHidden() || isMinimized() ? tr("Show") : tr("Hide"));
@@ -1509,6 +1618,106 @@ void MainWindow::refreshDetailPage()
         m_deviceAlertPolicyCombo->setCurrentIndex(policyIndex);
         m_deviceKeepCacheCheck->setChecked(DeviceSettings::keepCachedForever(id));
     }
+    refreshHistoryChart();
+}
+
+qint64 MainWindow::historyRangeStartMsecs() const
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    switch (m_historyRangeCombo ? m_historyRangeCombo->currentIndex() : 0) {
+    case 0: return now - 24LL * 60 * 60 * 1000;
+    case 1: return now - 7LL * 24 * 60 * 60 * 1000;
+    case 2: return now - 30LL * 24 * 60 * 60 * 1000;
+    case 3: return 0;
+    default: return now - 24LL * 60 * 60 * 1000;
+    }
+}
+
+void MainWindow::refreshHistoryChart()
+{
+    if (!m_historyChart || m_currentDetailId.isEmpty()) {
+        return;
+    }
+    const bool available = m_historyStore && m_historyStore->isAvailable();
+    m_exportHistoryButton->setEnabled(available);
+    m_historyRangeCombo->setEnabled(available);
+    if (!available) {
+        m_historyLegendLabel->clear();
+        m_historyChart->setSamples({});
+        m_historyChart->setErrorText(m_historyStore
+            ? tr("History is unavailable: %1").arg(m_historyStore->errorString())
+            : tr("History is unavailable."));
+        return;
+    }
+
+    const QList<BatteryHistorySample> rows = m_historyStore->samples(
+        m_currentDetailId, historyRangeStartMsecs(), QDateTime::currentMSecsSinceEpoch());
+    m_historyChart->setSamples(rows);
+    const bool airPods = std::any_of(rows.cbegin(), rows.cend(),
+        [](const BatteryHistorySample &s) {
+            return s.subType == BatteryDevice::SubType::AirPods;
+        });
+    m_historyLegendLabel->setText(airPods
+        ? tr("Blue: left  •  Green: right  •  Orange: case")
+        : tr("Battery level over time"));
+}
+
+void MainWindow::onHistoryRangeChanged(int index)
+{
+    Q_UNUSED(index)
+    refreshHistoryChart();
+}
+
+void MainWindow::onHistoryChanged(const QString &deviceId)
+{
+    if (deviceId == m_currentDetailId) {
+        refreshHistoryChart();
+    }
+}
+
+void MainWindow::onHistoryRetentionChanged(int index)
+{
+    const int days = historyRetentionDaysFromIndex(index);
+    if (m_historyStore) {
+        m_historyStore->setRetentionDays(days);
+    } else {
+        AppSettings::setHistoryRetentionDays(days);
+    }
+    refreshHistoryChart();
+}
+
+void MainWindow::onExportHistoryClicked()
+{
+    if (!m_historyStore || !m_historyStore->isAvailable() || m_currentDetailId.isEmpty()) {
+        return;
+    }
+    QString deviceName = m_currentDetailId;
+    for (const BatteryDevice &device : std::as_const(m_devices)) {
+        if (QString::fromStdWString(device.id) == m_currentDetailId) {
+            deviceName = deviceDisplayName(device);
+            break;
+        }
+    }
+    const qint64 from = historyRangeStartMsecs();
+    const qint64 to = QDateTime::currentMSecsSinceEpoch();
+    const QString start = from > 0
+        ? QDateTime::fromMSecsSinceEpoch(from).toString(QStringLiteral("yyyyMMdd"))
+        : QStringLiteral("all");
+    const QString end = QDateTime::fromMSecsSinceEpoch(to).toString(QStringLiteral("yyyyMMdd"));
+    const QString suggested = QStringLiteral("BatteryMonitor_%1_%2_%3.csv")
+        .arg(safeFileName(deviceName), start, end);
+    const QString path = QFileDialog::getSaveFileName(
+        this, tr("Export battery history"), suggested, tr("CSV files (*.csv)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    QString error;
+    if (!m_historyStore->exportCsv(path, m_currentDetailId, from, to, &error)) {
+        QMessageBox::warning(this, tr("Battery Monitor"),
+                             tr("Failed to export CSV: %1").arg(error));
+        return;
+    }
+    QMessageBox::information(this, tr("Battery Monitor"), tr("CSV export completed."));
 }
 
 void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)

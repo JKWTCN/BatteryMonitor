@@ -10,7 +10,7 @@ set(APP_VERSION_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(APP_VERSION_HEADER "${APP_VERSION_GENERATED_DIR}/GeneratedAppVersion.h")
 set(APP_VERSION_RC "${APP_VERSION_GENERATED_DIR}/app_version.rc")
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets WebSockets LinguistTools)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets WebSockets Sql LinguistTools)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
 qt_standard_project_setup(I18N_SOURCE_LANGUAGE en)
@@ -66,6 +66,11 @@ qt_add_executable(BatteryMonitor
     src/core/IBatteryProvider.h
     src/core/BatteryManager.cpp
     src/core/BatteryManager.h
+    # 电量历史持久化与自绘图表。
+    src/history/BatteryHistoryStore.cpp
+    src/history/BatteryHistoryStore.h
+    src/history/BatteryHistoryChart.cpp
+    src/history/BatteryHistoryChart.h
     # WebSocket JSON-RPC Server（src/rpc/）。
     src/rpc/DeviceJson.cpp
     src/rpc/DeviceJson.h
@@ -135,6 +140,7 @@ target_link_libraries(BatteryMonitor
         Qt::Core
         Qt::Widgets
         Qt6::WebSockets
+        Qt6::Sql
 )
 
 if(WIN32)

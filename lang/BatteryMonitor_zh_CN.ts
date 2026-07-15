@@ -423,5 +423,38 @@
         <source>Failed to start WebSocket service. The port may be in use.</source>
         <translation>启动 WebSocket 服务失败，端口可能已被占用。</translation>
     </message>
+    <message><source>Battery history</source><translation>电量历史</translation></message>
+    <message><source>Export CSV</source><translation>导出 CSV</translation></message>
+    <message><source>History retention</source><translation>历史保留时长</translation></message>
+    <message><source>7 days</source><translation>7 天</translation></message>
+    <message><source>30 days</source><translation>30 天</translation></message>
+    <message><source>90 days</source><translation>90 天</translation></message>
+    <message><source>180 days</source><translation>180 天</translation></message>
+    <message><source>365 days</source><translation>365 天</translation></message>
+    <message><source>Forever</source><translation>永久</translation></message>
+    <message><source>Last 24 hours</source><translation>最近 24 小时</translation></message>
+    <message><source>Last 7 days</source><translation>最近 7 天</translation></message>
+    <message><source>Last 30 days</source><translation>最近 30 天</translation></message>
+    <message><source>All history</source><translation>全部历史</translation></message>
+    <message><source>Blue: left  •  Green: right  •  Orange: case</source><translation>蓝色：左耳  •  绿色：右耳  •  橙色：充电盒</translation></message>
+    <message><source>Battery level over time</source><translation>电量随时间变化</translation></message>
+    <message><source>History is unavailable: %1</source><translation>历史功能不可用：%1</translation></message>
+    <message><source>History is unavailable.</source><translation>历史功能不可用。</translation></message>
+    <message><source>Export battery history</source><translation>导出电量历史</translation></message>
+    <message><source>CSV files (*.csv)</source><translation>CSV 文件 (*.csv)</translation></message>
+    <message><source>Failed to export CSV: %1</source><translation>导出 CSV 失败：%1</translation></message>
+    <message><source>CSV export completed.</source><translation>CSV 导出完成。</translation></message>
+</context>
+<context>
+    <name>BatteryHistoryChart</name>
+    <message><source>No history data</source><translation>暂无历史数据</translation></message>
+    <message><source>Empty</source><translation>耗尽</translation></message>
+    <message><source>Low</source><translation>偏低</translation></message>
+    <message><source>Medium</source><translation>中等</translation></message>
+    <message><source>Full</source><translation>满电</translation></message>
+</context>
+<context>
+    <name>BatteryHistoryStore</name>
+    <message><source>Failed to create the history data directory.</source><translation>无法创建历史数据目录。</translation></message>
 </context>
 </TS>

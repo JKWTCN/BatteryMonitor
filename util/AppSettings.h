@@ -8,7 +8,7 @@
 // （均为 "BatteryMonitor"），因此 QSettings 默认路径即可正确持久化，
 // 无需手动指定路径或格式。
 //
-// 三个键：
+// 主要键：
 //   - RefreshInterval : int 毫秒，默认 10000（10 秒）。
 //   - Language        : QString 语言代码（如 "en"、"zh_CN"），空串表示跟随系统。
 //   - Theme           : QString "system" / "light" / "dark"，默认 "system"。
@@ -16,6 +16,7 @@
 //                         沿用上次读数继续展示的保留窗口；0 = 从不缓存。
 //   - HideUnpairedAirPods : bool，默认 true。隐藏 BLE 广播中未与本机配对的
 //                           AirPods / Beats。
+//   - HistoryRetentionDays : int，默认 30；0 表示永久保留历史。
 //
 // 开机自启单独说明：它直接读写 Windows 注册表的 HKCU\...\Run，
 // 不进 QSettings。读取时也会兼容 Windows 任务管理器写入的
@@ -47,6 +48,11 @@ public:
     // true = 只显示与本机已配对的 Apple 音频设备；false = 显示附近所有可解析广播。
     static bool hideUnpairedAirPods();
     static void setHideUnpairedAirPods(bool hide);
+
+    // —— 电量历史保留天数 ——
+    // 0 = 永久保留；默认 30 天。
+    static int historyRetentionDays();
+    static void setHistoryRetentionDays(int days);
 
     // —— 开机自启 ——
     // 读取当前注册表中是否已配置开机自启。

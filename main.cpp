@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "src/core/BatteryManager.h"
+#include "src/history/BatteryHistoryStore.h"
 #include "src/providers/bluetooth/AirPodsProvider.h"
 #include "src/providers/bluetooth/BluetoothProvider.h"
 #include "src/providers/bluetooth/ClassicBluetoothProvider.h"
@@ -250,7 +251,11 @@ int main(int argc, char *argv[])
     manager.addProvider(std::make_unique<AsusRogHidProvider>());
     manager.addProvider(std::make_unique<RazerHidProvider>());
     manager.addProvider(std::make_unique<VgnHidProvider>());
-    manager.start();
+
+    // 历史服务必须在首次 Provider 刷新前接入，避免漏掉启动快照。
+    BatteryHistoryStore historyStore;
+    QObject::connect(&manager, &BatteryManager::devicesUpdated,
+                     &historyStore, &BatteryHistoryStore::recordSnapshot);
 
     // —— WebSocket JSON-RPC Server ——
     //
@@ -288,12 +293,14 @@ int main(int argc, char *argv[])
         }
     }
 
-    MainWindow w(&manager);
+    MainWindow w(&manager, &historyStore);
     w.setRpcServer(rpcServer);
 #ifdef Q_OS_WIN
     ShowMainWindowEventFilter showMainWindowEventFilter(&w, singleInstance.showMainWindowMessage());
     a.installNativeEventFilter(&showMainWindowEventFilter);
 #endif
+
+    manager.start();
 
     // --minimized：开机自启时由注册表命令行追加，让程序静默进入托盘，
     // 不弹主窗口。普通双击启动不带这个参数，正常显示窗口。
