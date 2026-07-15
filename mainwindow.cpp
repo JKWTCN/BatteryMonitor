@@ -408,6 +408,14 @@ QFrame *makeInfoGroup()
     layout->setSpacing(0);
     return group;
 }
+
+QLabel *makeSectionLabel(const QString &text)
+{
+    auto *label = new QLabel(text);
+    label->setObjectName(QStringLiteral("sectionLabel"));
+    label->setContentsMargins(6, 6, 0, 0);
+    return label;
+}
 } // namespace
 
 MainWindow::MainWindow(BatteryManager *manager, BatteryHistoryStore *historyStore,
@@ -499,7 +507,7 @@ void MainWindow::setupPages()
     if (!rootLayout) {
         rootLayout = new QVBoxLayout(central);
     }
-    rootLayout->setContentsMargins(18, 18, 18, 18);
+    rootLayout->setContentsMargins(20, 20, 20, 20);
     rootLayout->setSpacing(0);
 
     m_stack = new QStackedWidget(central);
@@ -548,23 +556,28 @@ void MainWindow::setupPages()
     m_detailPage->setObjectName(QStringLiteral("scrollPage"));
     auto *detailLayout = new QVBoxLayout(m_detailPage);
     detailLayout->setContentsMargins(2, 0, 8, 2);
-    detailLayout->setSpacing(12);
+    detailLayout->setSpacing(10);
 
     auto *navLayout = new QHBoxLayout();
     navLayout->setContentsMargins(0, 0, 0, 0);
-    auto *backButton = new QPushButton(tr("Back"));
-    backButton->setObjectName(QStringLiteral("backButton"));
-    backButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
-    backButton->setCursor(Qt::PointingHandCursor);
-    navLayout->addWidget(backButton);
+    m_detailBackButton = new QPushButton(tr("Back"));
+    m_detailBackButton->setObjectName(QStringLiteral("backButton"));
+    m_detailBackButton->setIcon(style()->standardIcon(QStyle::SP_ArrowBack));
+    m_detailBackButton->setCursor(Qt::PointingHandCursor);
+    navLayout->addWidget(m_detailBackButton);
     navLayout->addStretch(1);
     detailLayout->addLayout(navLayout);
-    connect(backButton, &QPushButton::clicked, this, &MainWindow::showDeviceList);
+    connect(m_detailBackButton, &QPushButton::clicked, this, &MainWindow::showDeviceList);
 
+    auto *hero = new QFrame();
+    hero->setObjectName(QStringLiteral("detailHero"));
+    auto *heroLayout = new QVBoxLayout(hero);
+    heroLayout->setContentsMargins(20, 18, 20, 18);
+    heroLayout->setSpacing(9);
     m_detailNameLabel = new QLabel();
     m_detailNameLabel->setObjectName(QStringLiteral("detailName"));
     m_detailNameLabel->setWordWrap(true);
-    detailLayout->addWidget(m_detailNameLabel);
+    heroLayout->addWidget(m_detailNameLabel);
 
     auto *summaryLayout = new QHBoxLayout();
     summaryLayout->setContentsMargins(0, 0, 0, 0);
@@ -576,8 +589,11 @@ void MainWindow::setupPages()
     summaryLayout->addWidget(m_detailBatteryLabel);
     summaryLayout->addWidget(m_detailStatusLabel);
     summaryLayout->addStretch(1);
-    detailLayout->addLayout(summaryLayout);
+    heroLayout->addLayout(summaryLayout);
+    detailLayout->addWidget(hero);
 
+    m_overviewSectionLabel = makeSectionLabel(tr("Overview"));
+    detailLayout->addWidget(m_overviewSectionLabel);
     auto *overviewGroup = makeInfoGroup();
     auto *overviewLayout = qobject_cast<QVBoxLayout *>(overviewGroup->layout());
     m_detailTypeValue = makeValueLabel();
@@ -607,6 +623,8 @@ void MainWindow::setupPages()
     // —— 设备设置（每台设备持久化的偏好）——
     // 显示在设备信息页底部：别名 / 是否加入托盘 / 是否启用低电量提醒 / 提醒阈值。
     // 控件值会随当前展示的设备切换而重新回填（refreshDetailPage 中处理）。
+    m_deviceSettingsSectionLabel = makeSectionLabel(tr("Device settings"));
+    detailLayout->addWidget(m_deviceSettingsSectionLabel);
     m_deviceSettingsGroup = makeInfoGroup();
     auto *deviceSettingsLayout =
         qobject_cast<QVBoxLayout *>(m_deviceSettingsGroup->layout());
@@ -664,13 +682,15 @@ void MainWindow::setupPages()
     detailLayout->addWidget(m_deviceSettingsGroup);
 
     // —— 电量历史图表 ——
+    m_historySectionLabel = makeSectionLabel(tr("Battery history"));
+    detailLayout->addWidget(m_historySectionLabel);
     m_historyGroup = makeInfoGroup();
     auto *historyLayout = qobject_cast<QVBoxLayout *>(m_historyGroup->layout());
     historyLayout->setContentsMargins(12, 12, 12, 12);
     historyLayout->setSpacing(10);
     auto *historyHeader = new QHBoxLayout();
     m_historyTitleLabel = new QLabel(tr("Battery history"));
-    m_historyTitleLabel->setObjectName(QStringLiteral("rowTitle"));
+    m_historyTitleLabel->setObjectName(QStringLiteral("historyTitle"));
     m_historyRangeCombo = new QComboBox();
     m_historyRangeCombo->setObjectName(QStringLiteral("settingsCombo"));
     m_exportHistoryButton = new QPushButton(tr("Export CSV"));
@@ -701,7 +721,7 @@ void MainWindow::setupPages()
     m_settingsPage->setObjectName(QStringLiteral("scrollPage"));
     auto *settingsLayout = new QVBoxLayout(m_settingsPage);
     settingsLayout->setContentsMargins(2, 0, 8, 2);
-    settingsLayout->setSpacing(12);
+    settingsLayout->setSpacing(10);
 
     auto *settingsNavLayout = new QHBoxLayout();
     settingsNavLayout->setContentsMargins(0, 0, 0, 0);
@@ -718,6 +738,8 @@ void MainWindow::setupPages()
     m_settingsTitleLabel->setWordWrap(true);
     settingsLayout->addWidget(m_settingsTitleLabel);
 
+    m_generalSectionLabel = makeSectionLabel(tr("General"));
+    settingsLayout->addWidget(m_generalSectionLabel);
     auto *settingsGroup = makeInfoGroup();
     auto *settingsGroupLayout = qobject_cast<QVBoxLayout *>(settingsGroup->layout());
     // 行标题先建占位，retranslateUi() 中会刷新翻译。
@@ -758,8 +780,13 @@ void MainWindow::setupPages()
     addInfoRow(settingsGroupLayout, m_hideUnpairedAirPodsRowTitle, m_hideUnpairedAirPodsCheck);
     addInfoRow(settingsGroupLayout, m_historyRetentionRowTitle, m_historyRetentionCombo);
     addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
+    settingsLayout->addWidget(settingsGroup);
 
     // —— WebSocket RPC 服务配置 ——
+    m_connectionsSectionLabel = makeSectionLabel(tr("Connections"));
+    settingsLayout->addWidget(m_connectionsSectionLabel);
+    auto *connectionsGroup = makeInfoGroup();
+    auto *connectionsLayout = qobject_cast<QVBoxLayout *>(connectionsGroup->layout());
     m_rpcRowTitle = new QLabel(tr("WebSocket service"));
     m_rpcEnabledCheck = new QCheckBox();
     m_rpcEnabledCheck->setObjectName(QStringLiteral("hideUnpairedAirPodsCheck"));
@@ -779,15 +806,20 @@ void MainWindow::setupPages()
     m_rpcTokenEdit->setEchoMode(QLineEdit::Password);
     m_rpcStatusValue = makeValueLabel();
     m_rpcStatusValue->setObjectName(QStringLiteral("rowValue"));
-    addInfoRow(settingsGroupLayout, m_rpcRowTitle, m_rpcEnabledCheck);
-    addInfoRow(settingsGroupLayout, m_rpcPortRowTitle, m_rpcPortSpin);
-    addInfoRow(settingsGroupLayout, m_rpcHostRowTitle, m_rpcHostEdit);
-    addInfoRow(settingsGroupLayout, m_rpcTokenRowTitle, m_rpcTokenEdit);
-    addInfoRow(settingsGroupLayout, new QLabel(tr("Service status")), m_rpcStatusValue);
+    addInfoRow(connectionsLayout, m_rpcRowTitle, m_rpcEnabledCheck);
+    addInfoRow(connectionsLayout, m_rpcPortRowTitle, m_rpcPortSpin);
+    addInfoRow(connectionsLayout, m_rpcHostRowTitle, m_rpcHostEdit);
+    addInfoRow(connectionsLayout, m_rpcTokenRowTitle, m_rpcTokenEdit);
+    addInfoRow(connectionsLayout, new QLabel(tr("Service status")), m_rpcStatusValue);
+    settingsLayout->addWidget(connectionsGroup);
 
-    addInfoRow(settingsGroupLayout, m_versionRowTitle, m_versionValue);
-    addInfoRow(settingsGroupLayout, m_projectRowTitle, m_projectLinkValue);
-    settingsLayout->addWidget(settingsGroup);
+    m_aboutSectionLabel = makeSectionLabel(tr("About"));
+    settingsLayout->addWidget(m_aboutSectionLabel);
+    auto *aboutGroup = makeInfoGroup();
+    auto *aboutLayout = qobject_cast<QVBoxLayout *>(aboutGroup->layout());
+    addInfoRow(aboutLayout, m_versionRowTitle, m_versionValue);
+    addInfoRow(aboutLayout, m_projectRowTitle, m_projectLinkValue);
+    settingsLayout->addWidget(aboutGroup);
     settingsLayout->addStretch(1);
 
     m_settingsScrollArea->setWidget(m_settingsPage);
@@ -805,13 +837,13 @@ void MainWindow::applyTheme()
     const QPalette pal = QApplication::palette();
     const bool dark = pal.color(QPalette::Window).lightness() < 128;
 
-    const QString base = dark ? QStringLiteral("#1c1c1e") : QStringLiteral("#f5f5f7");
-    const QString group = dark ? QStringLiteral("#2c2c2e") : QStringLiteral("#ffffff");
-    const QString groupAlt = dark ? QStringLiteral("#242426") : QStringLiteral("#fbfbfd");
+    const QString base = dark ? QStringLiteral("#171719") : QStringLiteral("#f5f5f7");
+    const QString group = dark ? QStringLiteral("#29292c") : QStringLiteral("#ffffff");
+    const QString groupAlt = dark ? QStringLiteral("#222225") : QStringLiteral("#f9f9fb");
     const QString text = dark ? QStringLiteral("#f5f5f7") : QStringLiteral("#1d1d1f");
     const QString secondary = dark ? QStringLiteral("#a1a1a6") : QStringLiteral("#6e6e73");
-    const QString border = dark ? QStringLiteral("#3a3a3c") : QStringLiteral("#d8d8dc");
-    const QString hover = dark ? QStringLiteral("#343438") : QStringLiteral("#eeeeef");
+    const QString border = dark ? QStringLiteral("#3b3b3f") : QStringLiteral("#dedee3");
+    const QString hover = dark ? QStringLiteral("#36363a") : QStringLiteral("#f0f0f3");
     const QString accent = dark ? QStringLiteral("#0a84ff") : QStringLiteral("#007aff");
 
     setStyleSheet(QStringLiteral(
@@ -825,8 +857,8 @@ void MainWindow::applyTheme()
         "QScrollBar::handle:vertical:hover { background: %5; }"
         "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }"
         "QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }"
-        "QTableWidget { background: %2; border: 1px solid %6; border-radius: 8px;"
-        "  padding: 6px; gridline-color: transparent; outline: none; selection-background-color: %7; }"
+        "QTableWidget { background: %2; border: 1px solid %6; border-radius: 14px;"
+        "  padding: 7px; gridline-color: transparent; outline: none; selection-background-color: %7; }"
         "QTableWidget::item { border: none; padding: 9px 10px; }"
         "QTableWidget::item:hover { background: %7; border-radius: 6px; }"
         "QHeaderView::section { background: %3; color: %5; border: none;"
@@ -834,29 +866,35 @@ void MainWindow::applyTheme()
         "QWidget#controlBar { background: transparent; }"
         "QLabel { color: %4; }"
         "QLabel#listHint { color: %5; padding: 0 4px; }"
-        "QLabel#detailName { font-size: 22pt; font-weight: 700; }"
-        "QLabel#detailBattery { color: %8; font-size: 12pt; font-weight: 700; }"
-        "QLabel#detailStatus { color: %5; font-size: 12pt; }"
-        "QLabel#rowTitle { color: %4; }"
+        "QLabel#sectionLabel { color: %5; font-size: 9pt; font-weight: 600; padding: 7px 6px 2px 6px; }"
+        "QFrame#detailHero { background: %2; border: 1px solid %6; border-radius: 16px; }"
+        "QLabel#detailName { font-size: 24pt; font-weight: 700; }"
+        "QLabel#detailBattery { color: %8; background: %3; border-radius: 10px;"
+        "  padding: 5px 10px; font-size: 12pt; font-weight: 700; }"
+        "QLabel#detailStatus { color: %5; padding: 5px 2px; font-size: 11pt; font-weight: 500; }"
+        "QLabel#historyTitle { color: %4; font-size: 11pt; font-weight: 600; }"
+        "QLabel#rowTitle { color: %4; font-weight: 500; }"
         "QLabel#rowValue { color: %5; }"
-        "QFrame#detailGroup { background: %2; border: 1px solid %6; border-radius: 8px; }"
-        "QWidget#infoRow { background: transparent; }"
-        "QPushButton { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
-        "  padding: 7px 14px; font-weight: 600; }"
+        "QFrame#detailGroup { background: %2; border: 1px solid %6; border-radius: 14px; }"
+        "QWidget#infoRow { background: transparent; border-bottom: 1px solid %6; }"
+        "QWidget#infoRow:hover { background: %3; }"
+        "QPushButton { background: %2; color: %4; border: 1px solid %6; border-radius: 10px;"
+        "  padding: 8px 15px; font-weight: 600; }"
         "QPushButton:hover { background: %7; }"
-        "QPushButton:pressed { background: %3; }"
+        "QPushButton:pressed { background: %3; padding-top: 9px; padding-bottom: 7px; }"
         "QPushButton#backButton { background: transparent; color: %8; border: none;"
-        "  padding: 6px 2px; font-weight: 600; }"
-        "QComboBox { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
-        "  padding: 6px 28px 6px 10px; }"
+        "  padding: 7px 5px; font-weight: 600; }"
+        "QPushButton#backButton:hover { background: %3; border-radius: 8px; }"
+        "QComboBox { background: %3; color: %4; border: 1px solid %6; border-radius: 9px;"
+        "  padding: 7px 28px 7px 11px; }"
         "QComboBox:hover { background: %7; }"
         "QComboBox QAbstractItemView { background: %2; color: %4; border: 1px solid %6;"
         "  selection-background-color: %8; selection-color: white; }"
-        "QLineEdit { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
-        "  padding: 6px 10px; }"
+        "QLineEdit { background: %3; color: %4; border: 1px solid %6; border-radius: 9px;"
+        "  padding: 7px 11px; }"
         "QLineEdit:hover { background: %7; }"
-        "QSpinBox { background: %2; color: %4; border: 1px solid %6; border-radius: 8px;"
-        "  padding: 6px 10px; }"
+        "QSpinBox { background: %3; color: %4; border: 1px solid %6; border-radius: 9px;"
+        "  padding: 7px 11px; }"
         "QSpinBox::up-button, QSpinBox::down-button { width: 18px; }"
         "QCheckBox { spacing: 8px; }"
         "QCheckBox::indicator { width: 18px; height: 18px; border-radius: 5px;"
@@ -1008,8 +1046,13 @@ void MainWindow::onThemeChanged(int index)
     default: theme = QStringLiteral("system"); break;
     }
     AppSettings::setTheme(theme);
-    // 实际 palette 应用由 main.cpp 中的全局 applyApplicationTheme() 完成。
+    // signal 使用同线程直连：返回时 main.cpp 已完成 application palette 更新。
+    // 主动刷新一次，避免仅依赖 ApplicationPaletteChange（某些 Qt/Windows
+    // 样式组合不会把该事件稳定传到已设置样式表的顶层窗口）。
     emit themeChanged(theme);
+    applyTheme();
+    rebuildTable(m_devices);
+    refreshDetailPage();
 }
 
 void MainWindow::onStartupToggled(bool checked)
@@ -1481,8 +1524,15 @@ void MainWindow::retranslateUi()
     if (m_listHintLabel) m_listHintLabel->setText(tr("Double-click a device to edit device settings."));
     if (m_refreshButton) m_refreshButton->setText(tr("Refresh"));
     if (m_settingsButton) m_settingsButton->setText(tr("Settings"));
+    if (m_detailBackButton) m_detailBackButton->setText(tr("Back"));
     if (m_settingsBackButton) m_settingsBackButton->setText(tr("Back"));
     if (m_settingsTitleLabel) m_settingsTitleLabel->setText(tr("Settings"));
+    if (m_overviewSectionLabel) m_overviewSectionLabel->setText(tr("Overview"));
+    if (m_deviceSettingsSectionLabel) m_deviceSettingsSectionLabel->setText(tr("Device settings"));
+    if (m_historySectionLabel) m_historySectionLabel->setText(tr("Battery history"));
+    if (m_generalSectionLabel) m_generalSectionLabel->setText(tr("General"));
+    if (m_connectionsSectionLabel) m_connectionsSectionLabel->setText(tr("Connections"));
+    if (m_aboutSectionLabel) m_aboutSectionLabel->setText(tr("About"));
     if (m_intervalRowTitle) m_intervalRowTitle->setText(tr("Refresh interval"));
     if (m_languageRowTitle) m_languageRowTitle->setText(tr("Language"));
     if (m_themeRowTitle) m_themeRowTitle->setText(tr("Theme"));

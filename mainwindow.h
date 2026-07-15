@@ -144,6 +144,10 @@ private:
     QScrollArea *m_settingsScrollArea = nullptr;
     QWidget *m_settingsPage = nullptr;
     QLabel *m_detailNameLabel = nullptr;
+    QPushButton *m_detailBackButton = nullptr;
+    QLabel *m_overviewSectionLabel = nullptr;
+    QLabel *m_deviceSettingsSectionLabel = nullptr;
+    QLabel *m_historySectionLabel = nullptr;
     QLabel *m_detailStatusLabel = nullptr;
     QLabel *m_detailBatteryLabel = nullptr;
     QLabel *m_detailTypeValue = nullptr;
@@ -186,6 +190,9 @@ private:
     QPushButton *m_settingsButton = nullptr;
     QPushButton *m_settingsBackButton = nullptr;
     QLabel *m_settingsTitleLabel = nullptr;
+    QLabel *m_generalSectionLabel = nullptr;
+    QLabel *m_connectionsSectionLabel = nullptr;
+    QLabel *m_aboutSectionLabel = nullptr;
     QLabel *m_intervalRowTitle = nullptr;
     QLabel *m_languageRowTitle = nullptr;
     QLabel *m_themeRowTitle = nullptr;

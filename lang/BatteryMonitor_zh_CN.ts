@@ -424,6 +424,11 @@
         <translation>启动 WebSocket 服务失败，端口可能已被占用。</translation>
     </message>
     <message><source>Battery history</source><translation>电量历史</translation></message>
+    <message><source>Overview</source><translation>概览</translation></message>
+    <message><source>Device settings</source><translation>设备设置</translation></message>
+    <message><source>General</source><translation>通用</translation></message>
+    <message><source>Connections</source><translation>连接</translation></message>
+    <message><source>About</source><translation>关于</translation></message>
     <message><source>Export CSV</source><translation>导出 CSV</translation></message>
     <message><source>History retention</source><translation>历史保留时长</translation></message>
     <message><source>7 days</source><translation>7 天</translation></message>

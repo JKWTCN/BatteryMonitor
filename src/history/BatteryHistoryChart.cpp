@@ -26,6 +26,7 @@ BatteryHistoryChart::BatteryHistoryChart(QWidget *parent)
 {
     setMinimumHeight(240);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    setAutoFillBackground(false);
 }
 
 void BatteryHistoryChart::setSamples(const QList<BatteryHistorySample> &samples)
@@ -114,7 +115,6 @@ void BatteryHistoryChart::paintEvent(QPaintEvent *event)
     Q_UNUSED(event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.fillRect(rect(), palette().color(QPalette::Base));
 
     if (!m_errorText.isEmpty()) {
         painter.setPen(palette().color(QPalette::Text));
@@ -136,9 +136,10 @@ void BatteryHistoryChart::paintEvent(QPaintEvent *event)
     qint64 lastTime = m_samples.last().timestampMsecs;
     if (lastTime <= firstTime) lastTime = firstTime + 60 * 1000;
 
-    const QColor grid = palette().color(QPalette::Midlight);
-    const QColor text = palette().color(QPalette::Text);
-    painter.setPen(QPen(grid, 1));
+    QColor grid = palette().color(QPalette::Midlight);
+    grid.setAlpha(palette().color(QPalette::Window).lightness() < 128 ? 80 : 130);
+    const QColor text = palette().color(QPalette::PlaceholderText);
+    painter.setPen(QPen(grid, 1, Qt::DotLine));
 
     const bool airPods = std::any_of(m_samples.cbegin(), m_samples.cend(),
         [](const BatteryHistorySample &s) { return s.subType == BatteryDevice::SubType::AirPods; });
@@ -162,7 +163,7 @@ void BatteryHistoryChart::paintEvent(QPaintEvent *event)
             label = QString::number(i * 25) + QLatin1Char('%');
         }
         painter.drawText(QRectF(2, y - 10, 47, 20), Qt::AlignRight | Qt::AlignVCenter, label);
-        painter.setPen(QPen(grid, 1));
+        painter.setPen(QPen(grid, 1, Qt::DotLine));
     }
 
     painter.setPen(text);
