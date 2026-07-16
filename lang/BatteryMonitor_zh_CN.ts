@@ -441,8 +441,8 @@
     <message><source>Last 7 days</source><translation>最近 7 天</translation></message>
     <message><source>Last 30 days</source><translation>最近 30 天</translation></message>
     <message><source>All history</source><translation>全部历史</translation></message>
-    <message><source>Blue: left  •  Green: right  •  Orange: case</source><translation>蓝色：左耳  •  绿色：右耳  •  橙色：充电盒</translation></message>
-    <message><source>Battery level over time</source><translation>电量随时间变化</translation></message>
+    <message><source>Blue: left  •  Green: right  •  Orange: case  •  Gray dashed: offline / no data</source><translation>蓝色：左耳  •  绿色：右耳  •  橙色：充电盒  •  灰色虚线：离线 / 无数据</translation></message>
+    <message><source>Blue: battery level  •  Gray dashed: offline / no data</source><translation>蓝色：电量  •  灰色虚线：离线 / 无数据</translation></message>
     <message><source>History is unavailable: %1</source><translation>历史功能不可用：%1</translation></message>
     <message><source>History is unavailable.</source><translation>历史功能不可用。</translation></message>
     <message><source>Export battery history</source><translation>导出电量历史</translation></message>

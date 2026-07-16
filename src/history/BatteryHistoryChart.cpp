@@ -9,6 +9,8 @@
 
 namespace
 {
+constexpr qint64 kSampleGapMsecs = 15LL * 60 * 1000;
+
 int percentageValue(const BatteryHistorySample &s) { return s.percentage; }
 int leftValue(const BatteryHistorySample &s) { return s.leftPercent; }
 int rightValue(const BatteryHistorySample &s) { return s.rightPercent; }
@@ -59,22 +61,28 @@ void BatteryHistoryChart::drawSeries(QPainter &painter, const QRectF &plot,
 {
     const bool discrete = getter == levelValue;
     QPainterPath path;
+    QPainterPath unavailablePath;
     bool active = false;
+    bool unavailableSinceLastValue = false;
     int lastPixelX = -1;
     int lastPixelY = -1;
-    qint64 lastTimestamp = 0;
+    int lastValuePixelX = -1;
+    int lastValuePixelY = -1;
+    qint64 lastValueTimestamp = 0;
 
     for (const BatteryHistorySample &sample : m_samples) {
         const int value = getter(sample);
         if (value < 0 || !sample.connected || sample.stale || sample.reason == QLatin1String("missing")) {
             active = false;
+            unavailableSinceLastValue = lastValueTimestamp > 0;
             lastPixelX = -1;
             lastPixelY = -1;
-            lastTimestamp = 0;
             continue;
         }
-        if (lastTimestamp > 0 && sample.timestampMsecs - lastTimestamp > 15LL * 60 * 1000) {
+        if (lastValueTimestamp > 0 &&
+            sample.timestampMsecs - lastValueTimestamp > kSampleGapMsecs) {
             active = false;
+            unavailableSinceLastValue = true;
             lastPixelX = -1;
             lastPixelY = -1;
         }
@@ -83,16 +91,28 @@ void BatteryHistoryChart::drawSeries(QPainter &painter, const QRectF &plot,
         const int x = qRound(plot.left() + qBound(0.0, ratio, 1.0) * plot.width());
         const int y = yForValue(plot, value, discrete);
 
+        // A dashed bridge makes an explicit offline record or a long sampling gap visible,
+        // without presenting the interval as measured battery data.
+        if (unavailableSinceLastValue && lastValuePixelX >= 0) {
+            unavailablePath.moveTo(lastValuePixelX, lastValuePixelY);
+            unavailablePath.lineTo(x, y);
+        }
+        unavailableSinceLastValue = false;
+
         // 同一像素位置的稳定心跳无需重复加入路径；变化值仍保留为竖向线段。
         // 这会把长历史压到控件分辨率内，同时不改变导出的原始数据。
         if (active && x == lastPixelX && y == lastPixelY) {
-            lastTimestamp = sample.timestampMsecs;
+            lastValuePixelX = x;
+            lastValuePixelY = y;
+            lastValueTimestamp = sample.timestampMsecs;
             continue;
         }
         if (active && x == lastPixelX) {
             path.lineTo(x, y);
             lastPixelY = y;
-            lastTimestamp = sample.timestampMsecs;
+            lastValuePixelX = x;
+            lastValuePixelY = y;
+            lastValueTimestamp = sample.timestampMsecs;
             continue;
         }
         if (!active) {
@@ -103,11 +123,16 @@ void BatteryHistoryChart::drawSeries(QPainter &painter, const QRectF &plot,
         }
         lastPixelX = x;
         lastPixelY = y;
-        lastTimestamp = sample.timestampMsecs;
+        lastValuePixelX = x;
+        lastValuePixelY = y;
+        lastValueTimestamp = sample.timestampMsecs;
     }
 
     painter.setPen(QPen(color, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     painter.drawPath(path);
+    painter.setPen(QPen(QColor(0x8e, 0x8e, 0x93), 2.0, Qt::DashLine,
+                        Qt::RoundCap, Qt::RoundJoin));
+    painter.drawPath(unavailablePath);
 }
 
 void BatteryHistoryChart::paintEvent(QPaintEvent *event)

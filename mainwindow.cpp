@@ -1708,8 +1708,8 @@ void MainWindow::refreshHistoryChart()
             return s.subType == BatteryDevice::SubType::AirPods;
         });
     m_historyLegendLabel->setText(airPods
-        ? tr("Blue: left  •  Green: right  •  Orange: case")
-        : tr("Battery level over time"));
+        ? tr("Blue: left  •  Green: right  •  Orange: case  •  Gray dashed: offline / no data")
+        : tr("Blue: battery level  •  Gray dashed: offline / no data"));
 }
 
 void MainWindow::onHistoryRangeChanged(int index)
