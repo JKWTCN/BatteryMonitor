@@ -91,6 +91,8 @@ qt_add_executable(BatteryMonitor
     src/providers/hid/AulaHidProvider.h
     src/providers/hid/AsusRogHidProvider.cpp
     src/providers/hid/AsusRogHidProvider.h
+    src/providers/hid/LogitechHidProvider.cpp
+    src/providers/hid/LogitechHidProvider.h
     src/providers/hid/RazerHidProvider.cpp
     src/providers/hid/RazerHidProvider.h
     src/providers/hid/VgnHidProvider.cpp
