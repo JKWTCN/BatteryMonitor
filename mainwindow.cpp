@@ -393,10 +393,11 @@ void addInfoRow(QVBoxLayout *layout, QLabel *titleLabel, QWidget *valueWidget)
     layout->addWidget(row);
 }
 
-void addInfoRow(QVBoxLayout *layout, const QString &title, QLabel *valueLabel)
+QLabel *addInfoRow(QVBoxLayout *layout, const QString &title, QLabel *valueLabel)
 {
     auto *titleLabel = new QLabel(title);
     addInfoRow(layout, titleLabel, valueLabel);
+    return titleLabel;
 }
 
 QFrame *makeInfoGroup()
@@ -604,11 +605,11 @@ void MainWindow::setupPages()
     m_detailBatteryValue = makeValueLabel();
     m_detailWiredValue = makeValueLabel();
     m_detailIdValue = makeValueLabel();
-    addInfoRow(overviewLayout, tr("Type"), m_detailTypeValue);
-    addInfoRow(overviewLayout, tr("Status"), m_detailStateValue);
-    addInfoRow(overviewLayout, tr("Battery"), m_detailBatteryValue);
-    addInfoRow(overviewLayout, tr("Wired"), m_detailWiredValue);
-    addInfoRow(overviewLayout, tr("Device ID"), m_detailIdValue);
+    m_detailTypeRowTitle = addInfoRow(overviewLayout, tr("Type"), m_detailTypeValue);
+    m_detailStatusRowTitle = addInfoRow(overviewLayout, tr("Status"), m_detailStateValue);
+    m_detailBatteryRowTitle = addInfoRow(overviewLayout, tr("Battery"), m_detailBatteryValue);
+    m_detailWiredRowTitle = addInfoRow(overviewLayout, tr("Wired"), m_detailWiredValue);
+    m_detailIdRowTitle = addInfoRow(overviewLayout, tr("Device ID"), m_detailIdValue);
     detailLayout->addWidget(overviewGroup);
 
     m_airPodsGroup = makeInfoGroup();
@@ -617,10 +618,10 @@ void MainWindow::setupPages()
     m_rightBatteryValue = makeValueLabel();
     m_caseBatteryValue = makeValueLabel();
     m_chargingValue = makeValueLabel();
-    addInfoRow(airPodsLayout, tr("Left battery"), m_leftBatteryValue);
-    addInfoRow(airPodsLayout, tr("Right battery"), m_rightBatteryValue);
-    addInfoRow(airPodsLayout, tr("Case battery"), m_caseBatteryValue);
-    addInfoRow(airPodsLayout, tr("Charging"), m_chargingValue);
+    m_leftBatteryRowTitle = addInfoRow(airPodsLayout, tr("Left battery"), m_leftBatteryValue);
+    m_rightBatteryRowTitle = addInfoRow(airPodsLayout, tr("Right battery"), m_rightBatteryValue);
+    m_caseBatteryRowTitle = addInfoRow(airPodsLayout, tr("Case battery"), m_caseBatteryValue);
+    m_chargingRowTitle = addInfoRow(airPodsLayout, tr("Charging"), m_chargingValue);
     detailLayout->addWidget(m_airPodsGroup);
 
     // —— 设备设置（每台设备持久化的偏好）——
@@ -1473,8 +1474,8 @@ void MainWindow::retranslateCombos()
         const int cur = m_languageCombo->currentIndex();
         m_languageCombo->clear();
         m_languageCombo->addItem(tr("System"));
-        m_languageCombo->addItem(tr("English"));
-        m_languageCombo->addItem(tr("Chinese (Simplified)"));
+        m_languageCombo->addItem(QStringLiteral("English"));
+        m_languageCombo->addItem(QStringLiteral("简体中文"));
         m_languageCombo->setCurrentIndex(cur < 0 ? 0 : cur);
         m_languageCombo->blockSignals(false);
     }
@@ -1525,6 +1526,9 @@ void MainWindow::retranslateCombos()
 
 void MainWindow::retranslateUi()
 {
+    // Refresh widgets created from mainwindow.ui, including the table headers.
+    ui->retranslateUi(this);
+
     // 重译设置页静态控件文本。
     if (m_listHintLabel) m_listHintLabel->setText(tr("Double-click a device to edit device settings."));
     if (m_refreshButton) m_refreshButton->setText(tr("Refresh"));
@@ -1533,6 +1537,15 @@ void MainWindow::retranslateUi()
     if (m_settingsBackButton) m_settingsBackButton->setText(tr("Back"));
     if (m_settingsTitleLabel) m_settingsTitleLabel->setText(tr("Settings"));
     if (m_overviewSectionLabel) m_overviewSectionLabel->setText(tr("Overview"));
+    if (m_detailTypeRowTitle) m_detailTypeRowTitle->setText(tr("Type"));
+    if (m_detailStatusRowTitle) m_detailStatusRowTitle->setText(tr("Status"));
+    if (m_detailBatteryRowTitle) m_detailBatteryRowTitle->setText(tr("Battery"));
+    if (m_detailWiredRowTitle) m_detailWiredRowTitle->setText(tr("Wired"));
+    if (m_detailIdRowTitle) m_detailIdRowTitle->setText(tr("Device ID"));
+    if (m_leftBatteryRowTitle) m_leftBatteryRowTitle->setText(tr("Left battery"));
+    if (m_rightBatteryRowTitle) m_rightBatteryRowTitle->setText(tr("Right battery"));
+    if (m_caseBatteryRowTitle) m_caseBatteryRowTitle->setText(tr("Case battery"));
+    if (m_chargingRowTitle) m_chargingRowTitle->setText(tr("Charging"));
     if (m_deviceSettingsSectionLabel) m_deviceSettingsSectionLabel->setText(tr("Device settings"));
     if (m_historySectionLabel) m_historySectionLabel->setText(tr("Battery history"));
     if (m_generalSectionLabel) m_generalSectionLabel->setText(tr("General"));

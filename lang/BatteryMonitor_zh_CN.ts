@@ -17,6 +17,10 @@
         <translation>类型</translation>
     </message>
     <message>
+        <source>Device</source>
+        <translation>设备</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="460"/>
         <source>Battery</source>
         <translation>电量</translation>
@@ -278,16 +282,6 @@
         <translation>深色</translation>
     </message>
     <message>
-        <location filename="../mainwindow.cpp" line="1025"/>
-        <source>English</source>
-        <translation>English</translation>
-    </message>
-    <message>
-        <location filename="../mainwindow.cpp" line="1026"/>
-        <source>Chinese (Simplified)</source>
-        <translation>简体中文</translation>
-    </message>
-    <message>
         <location filename="../mainwindow.cpp" line="1068"/>
         <source>Show</source>
         <translation>显示</translation>
@@ -357,6 +351,10 @@
         <location filename="../mainwindow.cpp" line="1063"/>
         <source>Start with Windows</source>
         <translation>开机自启</translation>
+    </message>
+    <message>
+        <source>Failed to update the Windows startup setting.</source>
+        <translation>更新 Windows 开机自启设置失败。</translation>
     </message>
     <message>
         <location filename="../mainwindow.cpp" line="559"/>
