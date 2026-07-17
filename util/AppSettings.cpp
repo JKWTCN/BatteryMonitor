@@ -18,6 +18,7 @@ constexpr auto kKeyTheme = "Theme";
 constexpr auto kKeyStaleRetentionSec = "StaleRetentionSec";
 constexpr auto kKeyHideUnpairedAirPods = "HideUnpairedAirPods";
 constexpr auto kKeyHistoryRetentionDays = "HistoryRetentionDays";
+constexpr auto kKeyWindowSize = "WindowSize";
 
 constexpr int kDefaultRefreshInterval = 10000;
 const QString kDefaultLanguage = QString();      // 空 = 跟随系统
@@ -88,6 +89,19 @@ int AppSettings::historyRetentionDays()
 void AppSettings::setHistoryRetentionDays(int days)
 {
     QSettings().setValue(kKeyHistoryRetentionDays, qMax(0, days));
+}
+
+QSize AppSettings::windowSize()
+{
+    const QSize size = QSettings().value(kKeyWindowSize).toSize();
+    return size.isValid() && !size.isEmpty() ? size : QSize();
+}
+
+void AppSettings::setWindowSize(const QSize &size)
+{
+    if (size.isValid() && !size.isEmpty()) {
+        QSettings().setValue(kKeyWindowSize, size);
+    }
 }
 
 // —— WebSocket JSON-RPC Server ——

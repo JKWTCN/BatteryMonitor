@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QSize>
 #include <QString>
 
 // 集中读写用户偏好（QSettings 的薄封装）。
@@ -53,6 +54,11 @@ public:
     // 0 = 永久保留；默认 30 天。
     static int historyRetentionDays();
     static void setHistoryRetentionDays(int days);
+
+    // —— 主窗口大小 ——
+    // 返回上次关闭窗口时保存的大小；尚未保存时返回无效 QSize。
+    static QSize windowSize();
+    static void setWindowSize(const QSize &size);
 
     // —— 开机自启 ——
     // 读取当前注册表中是否已配置开机自启。

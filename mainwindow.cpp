@@ -428,7 +428,10 @@ MainWindow::MainWindow(BatteryManager *manager, BatteryHistoryStore *historyStor
     ui->setupUi(this);
     setupPages();
     setMinimumSize(600, 420);
-    resize(760, 560);
+    const QSize savedWindowSize = AppSettings::windowSize();
+    resize(savedWindowSize.isValid()
+               ? savedWindowSize.expandedTo(minimumSize())
+               : QSize(760, 560));
 
     // 表格基础外观。
     ui->deviceTable->setColumnCount(4);
@@ -1172,6 +1175,7 @@ void MainWindow::onToggleVisible()
 
 void MainWindow::onQuit()
 {
+    AppSettings::setWindowSize(size());
     // 清理托盘图标，避免退出后残留。
     if (m_tray) {
         m_tray->hide();
@@ -1286,6 +1290,7 @@ void MainWindow::showTrayHintOnce()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    AppSettings::setWindowSize(size());
     // 关闭窗口 -> 最小化到托盘（不退出）。仅“退出”菜单真正退出。
     if (m_tray && m_tray->isVisible()) {
         showTrayHintOnce();
