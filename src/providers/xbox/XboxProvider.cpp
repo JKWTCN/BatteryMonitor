@@ -288,9 +288,11 @@ std::vector<BatteryDevice> XboxProvider::readDevices()
 
         switch (batteryInfo.BatteryType) {
         case BATTERY_TYPE_WIRED:
-            // 接有线电源：无电池。
+            // XInput 的“有线”描述的是 Windows 看到的连接。部分 2.4 GHz
+            // dongle 也会伪装成 USB 有线手柄，但仍通过 BatteryLevel 上报
+            // 无线手柄电量，因此不能在这里丢弃档位。
             device.wired = true;
-            device.level = BatteryLevel::Unknown;
+            device.level = levelFromXInput(batteryInfo.BatteryLevel);
             break;
         case BATTERY_TYPE_DISCONNECTED:
             // 槽位在线但电池断开：视为未连接电量。

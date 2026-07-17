@@ -74,7 +74,8 @@ struct BatteryDevice
     // 普通设备默认 true；只有 AirPods provider 会填 false。
     bool paired = true;
 
-    // 是否接有线电源（Xbox 接有线时无电池）。
+    // Windows / 设备协议是否报告为有线供电。该标记可以和有效电量同时存在：
+    // 部分兼容 XInput 的 2.4 GHz dongle 会伪装成 USB 有线手柄，同时上报电量。
     bool wired = false;
 
     // 设备当前是否在线。

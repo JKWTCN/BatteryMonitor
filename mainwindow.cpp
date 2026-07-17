@@ -93,10 +93,25 @@ QString levelText(BatteryLevel level)
     }
 }
 
-// 电量列显示文本：AirPods 三路电量；蓝牙精确百分比；Xbox 档位名；有线单独标注。
+// 设备是否有可展示的电量读数。
+bool hasKnownBattery(const BatteryDevice &device)
+{
+    return device.percentage >= 0 || device.level != BatteryLevel::Unknown;
+}
+
+// 有线设备通常不展示电量；Xbox 例外，因为不少 2.4 GHz dongle 会被 XInput
+// 标成有线，同时仍在 BatteryLevel 中提供真实的无线手柄电量。
+bool shouldUseBattery(const BatteryDevice &device)
+{
+    return hasKnownBattery(device)
+        && (!device.wired || device.type == BatteryDevice::Type::Xbox);
+}
+
+// 电量列显示文本：AirPods 三路电量；蓝牙精确百分比；Xbox 档位名；
+// 无有效电量的有线设备单独标注。
 QString batteryText(const BatteryDevice &device)
 {
-    if (device.wired) {
+    if (device.wired && !shouldUseBattery(device)) {
         return MainWindow::tr("Wired");
     }
     // AirPods / Beats：显示左/右/盒三路电量，未知路显示为 "-"。
@@ -237,9 +252,9 @@ QIcon appIcon()
 BatteryIconState lowestIconState(const QList<BatteryDevice> &devices)
 {
     BatteryIconState lowest;
-    bool hasKnownBattery = false;
+    bool foundKnownBattery = false;
     for (const auto &device : devices) {
-        if (device.wired) {
+        if (device.wired && !shouldUseBattery(device)) {
             continue;
         }
         if (device.percentage < 0 && device.level == BatteryLevel::Unknown) {
@@ -247,10 +262,10 @@ BatteryIconState lowestIconState(const QList<BatteryDevice> &devices)
         }
 
         const int percent = iconPercentForDevice(device);
-        if (!hasKnownBattery || percent < lowest.percent) {
+        if (!foundKnownBattery || percent < lowest.percent) {
             lowest.level = device.level;
             lowest.percent = percent;
-            hasKnownBattery = true;
+            foundKnownBattery = true;
         }
     }
     return lowest;
@@ -332,7 +347,7 @@ bool isAtOrBelowThreshold(const BatteryDevice &device, int threshold)
     if (threshold <= 0) {
         return false;
     }
-    if (device.wired || !device.connected) {
+    if ((device.wired && !shouldUseBattery(device)) || !device.connected) {
         return false;
     }
     if (device.percentage >= 0) {
@@ -1839,7 +1854,8 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
         const int displayPercent = hasPercent
             ? device.percentage
             : levelRepresentativePercent(device.level);
-        bar->setValue(device.wired ? 100 : displayPercent);
+        const bool useBattery = shouldUseBattery(device);
+        bar->setValue(device.wired && !useBattery ? 100 : displayPercent);
         bar->setTextVisible(false);
         bar->setFixedHeight(16);
 
@@ -1848,7 +1864,7 @@ void MainWindow::rebuildTable(const QList<BatteryDevice> &devices)
         // stale 设备把 chunk 也降级为中性灰，进一步区分实时值与缓存值。
         const QColor color = device.stale
             ? muted
-            : (device.wired ? QColor(142, 142, 147) : levelColor(device.level));
+            : (useBattery ? levelColor(device.level) : QColor(142, 142, 147));
         const QString trackColor = dark ? QStringLiteral("#3a3a3c") : QStringLiteral("#e5e5ea");
         bar->setStyleSheet(QStringLiteral(
             "QProgressBar { background: %1; border-radius: 6px; }"
