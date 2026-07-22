@@ -25,6 +25,7 @@ Only the following devices have been tested so far:
 | Razer Basilisk X HyperSpeed + Dongle    | VID`0x1532` / PID `0x0083`                                            | Verified            |
 | Razer BlackWidow V4 Mini HyperSpeed (Wireless) | VID`0x1532` / PID `0x02BA`                                            | Verified            |
 | ROG Strix Scope RX TKL Wireless Deluxe + Dongle | VID`0x0B05` / PID `0x1A07`                                         | Verified            |
+| ROG Keris Wireless AimPoint                     | VID`0x0B05` / PID `0x1A66` (wired) or `0x1A68` (2.4G)              | Verified            |
 | Logitech MX Master 4 + Bolt receiver     | VID`0x046D` / PID `0xC548`, HID++ 2.0 `0x1004`                        | Verified            |
 | Razer Mouse Dock Pro + Razer Basilisk V3 Pro 35K (Wireless) | VID`0x1532` / PID `0x00A4` (dock) + PID `0x00CD` (mouse) | Verified |
 
@@ -37,6 +38,7 @@ Besides the verified devices above, the code also contains adapter logic for som
 | AULA / AJAZZ 2.4G dongle devices                   | VID`0x0C45`, 2.4G dongle PID allowlist only                                         | Theoretical, unverified |
 | VGN / related-brand 2.4G dongle keyboards and mice | Multiple VID/PID values, built-in protocol families and partial VID fallback matching | Theoretical, unverified |
 | Razer mice / keyboards                             | VID`0x1532`, built-in PID table                                                     | Theoretical, unverified |
+| ASUS ROG / TUF mice                                | VID`0x0B05`; Chakram, Gladius, Harpe, Keris, Pugio, Spatha, Strix, TUF, and related models in the built-in PID table | Theoretical, unverified |
 | Logitech HID++ 2.0 receiver devices                | Bolt / Unifying / Nano / Lightspeed; battery features `0x1004` / `0x1000` / `0x1001` | Theoretical, unverified |
 | AirPods / Beats series                             | Apple Company ID`0x004C`, built-in Model ID table                                   | Theoretical, unverified |
 | Xbox / XInput / Windows game controllers           | Microsoft VID`0x045E` or Windows controller interfaces                              | Theoretical, unverified |
@@ -72,6 +74,7 @@ The project is split into several providers by device source:
 - `XboxProvider`: reads Xbox controller battery through XInput, RawGameController, and Windows device properties
 - `AulaHidProvider`: reads AULA 2.4G dongle device battery through hidapi
 - `AsusRogHidProvider`: reads battery level and charging state from the ROG Strix Scope RX TKL Wireless Deluxe dongle through hidapi
+- `AsusMouseHidProvider`: reads battery level and charging state from ASUS ROG / TUF mice through hidapi
 - `LogitechHidProvider`: reads Logitech receiver-device battery and charging state through HID++ 2.0 Unified Battery, Battery Status, or Battery Voltage
 - `VgnHidProvider`: reads VGN / related-brand 2.4G dongle device battery through hidapi
 - `RazerHidProvider`: reads Razer mouse / keyboard battery through hidapi
