@@ -1,16 +1,18 @@
 #include "mainwindow.h"
 #include "src/core/BatteryManager.h"
 #include "src/history/BatteryHistoryStore.h"
-#include "src/providers/bluetooth/AirPodsProvider.h"
-#include "src/providers/bluetooth/BluetoothProvider.h"
-#include "src/providers/bluetooth/ClassicBluetoothProvider.h"
-#include "src/providers/hid/AulaHidProvider.h"
 #include "src/providers/hid/AsusMouseHidProvider.h"
 #include "src/providers/hid/AsusRogHidProvider.h"
 #include "src/providers/hid/LogitechHidProvider.h"
 #include "src/providers/hid/RazerHidProvider.h"
+#ifdef Q_OS_WIN
+#include "src/providers/bluetooth/AirPodsProvider.h"
+#include "src/providers/bluetooth/BluetoothProvider.h"
+#include "src/providers/bluetooth/ClassicBluetoothProvider.h"
+#include "src/providers/hid/AulaHidProvider.h"
 #include "src/providers/hid/VgnHidProvider.h"
 #include "src/providers/xbox/XboxProvider.h"
+#endif
 #include "src/rpc/RpcServer.h"
 #include "util/AppSettings.h"
 #include "util/Logger.h"
@@ -247,16 +249,20 @@ int main(int argc, char *argv[])
     //                                按协议族分派（ThreeMode / Weisheng / Beiying /
     //                                VgnRyMouse / Yongjiaxin / VgnLdMs / Arbit / VgnKc2）。
     BatteryManager manager;
+#ifdef Q_OS_WIN
     manager.addProvider(std::make_unique<BluetoothProvider>());
     manager.addProvider(std::make_unique<ClassicBluetoothProvider>());
     manager.addProvider(std::make_unique<AirPodsProvider>());
     manager.addProvider(std::make_unique<XboxProvider>());
     manager.addProvider(std::make_unique<AulaHidProvider>());
+#endif
     manager.addProvider(std::make_unique<AsusRogHidProvider>());
     manager.addProvider(std::make_unique<AsusMouseHidProvider>());
     manager.addProvider(std::make_unique<LogitechHidProvider>());
     manager.addProvider(std::make_unique<RazerHidProvider>());
+#ifdef Q_OS_WIN
     manager.addProvider(std::make_unique<VgnHidProvider>());
+#endif
 
     // 历史服务必须在首次 Provider 刷新前接入，避免漏掉启动快照。
     BatteryHistoryStore historyStore;

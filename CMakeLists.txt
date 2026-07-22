@@ -48,11 +48,41 @@ set(APP_RESOURCE_FILES
     res/resources.qrc
 )
 
+set(APP_PLATFORM_PROVIDER_FILES
+    # hidapi-only providers shared by Windows and Linux.
+    src/providers/hid/AsusRogHidProvider.cpp
+    src/providers/hid/AsusRogHidProvider.h
+    src/providers/hid/AsusMouseHidProvider.cpp
+    src/providers/hid/AsusMouseHidProvider.h
+    src/providers/hid/LogitechHidProvider.cpp
+    src/providers/hid/LogitechHidProvider.h
+    src/providers/hid/RazerHidProvider.cpp
+    src/providers/hid/RazerHidProvider.h
+)
+
 if(WIN32)
     set_source_files_properties("${APP_VERSION_RC}" PROPERTIES GENERATED TRUE)
     list(APPEND APP_RESOURCE_FILES
         "${APP_VERSION_RC}"
     )
+    list(APPEND APP_PLATFORM_PROVIDER_FILES
+        src/providers/bluetooth/BluetoothProvider.cpp
+        src/providers/bluetooth/BluetoothProvider.h
+        src/providers/bluetooth/ClassicBluetoothProvider.cpp
+        src/providers/bluetooth/ClassicBluetoothProvider.h
+        src/providers/bluetooth/AirPodsProvider.cpp
+        src/providers/bluetooth/AirPodsProvider.h
+        src/providers/xbox/XboxProvider.cpp
+        src/providers/xbox/XboxProvider.h
+        # These providers still use Win32 HID APIs to inspect report lengths.
+        src/providers/hid/AulaHidProvider.cpp
+        src/providers/hid/AulaHidProvider.h
+        src/providers/hid/VgnHidProvider.cpp
+        src/providers/hid/VgnHidProvider.h
+    )
+else()
+    # Arch's hidapi package exports hidapi::hidraw and supplies <hidapi.h>.
+    find_package(hidapi CONFIG REQUIRED COMPONENTS hidraw)
 endif()
 
 qt_add_executable(BatteryMonitor
@@ -78,27 +108,8 @@ qt_add_executable(BatteryMonitor
     src/rpc/JsonRpc.h
     src/rpc/RpcServer.cpp
     src/rpc/RpcServer.h
-    # 具体 Provider 实现：按传输方式分目录，新增传输方式在此追加。
-    src/providers/bluetooth/BluetoothProvider.cpp
-    src/providers/bluetooth/BluetoothProvider.h
-    src/providers/bluetooth/ClassicBluetoothProvider.cpp
-    src/providers/bluetooth/ClassicBluetoothProvider.h
-    src/providers/bluetooth/AirPodsProvider.cpp
-    src/providers/bluetooth/AirPodsProvider.h
-    src/providers/xbox/XboxProvider.cpp
-    src/providers/xbox/XboxProvider.h
-    src/providers/hid/AulaHidProvider.cpp
-    src/providers/hid/AulaHidProvider.h
-    src/providers/hid/AsusRogHidProvider.cpp
-    src/providers/hid/AsusRogHidProvider.h
-    src/providers/hid/AsusMouseHidProvider.cpp
-    src/providers/hid/AsusMouseHidProvider.h
-    src/providers/hid/LogitechHidProvider.cpp
-    src/providers/hid/LogitechHidProvider.h
-    src/providers/hid/RazerHidProvider.cpp
-    src/providers/hid/RazerHidProvider.h
-    src/providers/hid/VgnHidProvider.cpp
-    src/providers/hid/VgnHidProvider.h
+    # Provider sources are selected per platform above.
+    ${APP_PLATFORM_PROVIDER_FILES}
     util/AppSettings.cpp
     util/AppSettings.h
     util/DeviceSettings.cpp
@@ -166,6 +177,8 @@ if(WIN32)
                 ${HIDAPI_ROOT}/hidapi.dll
                 $<TARGET_FILE_DIR:BatteryMonitor>
         VERBATIM)
+else()
+    target_link_libraries(BatteryMonitor PRIVATE hidapi::hidraw)
 endif()
 
 install(TARGETS BatteryMonitor
