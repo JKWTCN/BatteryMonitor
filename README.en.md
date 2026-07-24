@@ -19,6 +19,7 @@ Only the following devices have been tested so far:
 | Generic Bluetooth devices               | No fixed USB VID/PID; uses Windows Bluetooth device information           | Verified            |
 | AULA F87ProV2D + AULA F87ProV2D Dongle | VID`0x0C45` / PID `0xFEFE`                                            | Verified            |
 | AJAZZ MK87PRO + HS USB Dongle           | VID`0x0C45` / PID `0xFEFC`                                            | Verified            |
+| ATK V75X + ATK V75X Dongle             | VID`0x320F` / PID `0x5055` (USB), PID `0x5088` (dongle)                    | Verified            |
 | VGN DragonFly F2 Pro Max + Dongle       | VGN MouseEnc protocol family; actual VID/PID depends on the device report | Verified            |
 | AirPods 2                               | Apple Company ID`0x004C` / Model ID `0x200F`                          | Verified            |
 | Xbox controller                         | VID`0x045E`; PID depends on the exact model                             | Verified            |
