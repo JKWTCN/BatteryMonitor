@@ -156,6 +156,8 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 
 仓库还附带一个开箱即用的测试页面 [docs/websocket-test.html](docs/websocket-test.html)，浏览器直接打开即可连接服务、调用全部方法、查看实时推送与设备详情，支持中英文切换。
 
+配套的 StreamDock 插件：[JKWTCN/BatteryMonitorDock](https://github.com/JKWTCN/BatteryMonitorDock)。
+
 ## 项目结构
 
 ```text

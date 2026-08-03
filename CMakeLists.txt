@@ -44,9 +44,16 @@ if(MSVC)
     add_compile_definitions(UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 
-set(APP_RESOURCE_FILES
+# 主 Qt 资源（图标等）单独用 qt_add_resources 编译。
+# 不要把 .qrc 和 Windows 的 .rc 混在同一个源列表里传给 qt_add_executable——
+# Qt6 的 AUTORCC 在这种混合列表下容易跳过对 .qrc 的处理，
+# 导致 :/icons/app.png 等运行时资源根本没进二进制（托盘显示空白）。
+set(APP_QRC_FILES
     res/resources.qrc
 )
+
+# APP_RESOURCE_FILES 只放平台资源编译器（rc.exe）处理的对象，不含 Qt 的 .qrc。
+set(APP_RESOURCE_FILES)
 
 set(APP_PLATFORM_PROVIDER_FILES
     # hidapi-only providers shared by Windows and Linux.
@@ -118,6 +125,13 @@ qt_add_executable(BatteryMonitor
     util/Logger.h
     ${APP_RESOURCE_FILES}
 )
+
+# 显式编译 Qt 资源（生成 qrc_resources.cpp 并链入 target），
+# 确保 :/icons/app.png 进入二进制。
+qt_add_resources(BatteryMonitor_BIG_RESOURCE_SOURCES
+    ${APP_QRC_FILES}
+)
+target_sources(BatteryMonitor PRIVATE ${BatteryMonitor_BIG_RESOURCE_SOURCES})
 
 add_custom_target(generate_app_version ALL
     COMMAND ${CMAKE_COMMAND}

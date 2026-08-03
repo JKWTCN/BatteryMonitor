@@ -158,6 +158,8 @@ Listens on `ws://127.0.0.1:19211/` by default (localhost only, no auth required)
 
 A ready-to-use test page is also included at [docs/websocket-test.html](docs/websocket-test.html) — open it directly in a browser to connect to the server, call all methods, view real-time push and device details, with Chinese/English language switching.
 
+Companion StreamDock plugin: [JKWTCN/BatteryMonitorDock](https://github.com/JKWTCN/BatteryMonitorDock).
+
 ## Project Structure
 
 ```text
