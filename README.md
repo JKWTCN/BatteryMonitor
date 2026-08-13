@@ -29,6 +29,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 | ROG Keris Wireless AimPoint                    | VID`0x0B05` / PID `0x1A66`（有线）或 `0x1A68`（2.4G） | 已验证   |
 | Logitech MX Master 4 + Bolt 接收器       | VID`0x046D` / PID `0xC548`，HID++ 2.0 `0x1004` | 已验证   |
 | Razer Mouse Dock Pro + Razer Basilisk V3 Pro 35K (Wireless) | VID`0x1532` / PID `0x00A4` (底座) + PID `0x00CD` (鼠标) | 已验证 |
+| MCHOSE A7 V2 Pro（有线）                | VID`0x3837` / PID `0x4018`，支持精确电量和充电状态 | 已验证 |
 
 ## 理论支持设备
 
@@ -41,6 +42,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 | Razer 鼠标 / 键盘                    | VID`0x1532`，代码内置 PID 表                   | 理论支持，未验证 |
 | ASUS ROG / TUF 鼠标                  | VID`0x0B05`；Chakram、Gladius、Harpe、Keris、Pugio、Spatha、Strix、TUF 等型号，代码内置 PID 表 | 理论支持，未验证 |
 | Logitech HID++ 2.0 接收器设备        | Bolt / Unifying / Nano / Lightspeed；电池 Feature `0x1004` / `0x1000` / `0x1001` | 理论支持，未验证 |
+| MCHOSE A7 V2 系列鼠标                 | 有线 VID`0x3837` / PID `0x4018`、`0x4019`、`0x4021`、`0x4023`；1K/8K Dongle PID `0x100A` / `0x100B`；8K MagDock VID`0x5253` / PID `0x1020` | 部分验证 |
 | AirPods / Beats 系列                 | Apple Company ID`0x004C`，代码内置 Model ID 表 | 理论支持，未验证 |
 | Xbox / XInput / Windows 游戏控制器   | Microsoft VID`0x045E` 或 Windows 控制器接口    | 理论支持，未验证 |
 | 标准 BLE 电量服务设备                | BLE GATT Battery Service，无固定 USB VID/PID     | 理论支持，未验证 |
@@ -77,6 +79,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 - `AsusRogHidProvider`：通过 hidapi 读取 ROG Strix Scope RX TKL Wireless Deluxe 接收器设备电量和充电状态
 - `AsusMouseHidProvider`：通过 hidapi 读取 ASUS ROG / TUF 鼠标的电量和充电状态
 - `LogitechHidProvider`：通过 HID++ 2.0 的 Unified Battery、Battery Status 或 Battery Voltage 读取 Logitech 接收器设备的电量和充电状态
+- `MchoseHidProvider`：通过 hidapi 读取 MCHOSE A7 V2 系列鼠标在有线、1K/8K Dongle 和 8K MagDock 模式下的精确电量与充电状态；自动跳过不支持查询的重复 HID collection
 - `VgnHidProvider`：通过 hidapi 读取 VGN / 关联品牌 2.4G 接收器设备电量
 - `RazerHidProvider`：通过 hidapi 读取 Razer 鼠标 / 键盘电量
 
@@ -166,7 +169,7 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 ├── mainwindow.cpp / mainwindow.h     # 主窗口、托盘、设置页、设备详情页
 ├── src/core                         # 设备模型、Provider 接口、BatteryManager 聚合逻辑
 ├── src/providers/bluetooth          # 蓝牙 / AirPods Provider
-├── src/providers/hid                # AULA / Logitech / VGN / Razer HID Provider
+├── src/providers/hid                # AULA / ASUS / Logitech / MCHOSE / VGN / Razer HID Provider
 ├── src/providers/xbox               # Xbox Provider
 ├── src/rpc                          # WebSocket JSON-RPC 服务
 ├── util                             # 设置、日志、版本信息

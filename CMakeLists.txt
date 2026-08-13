@@ -63,6 +63,8 @@ set(APP_PLATFORM_PROVIDER_FILES
     src/providers/hid/AsusMouseHidProvider.h
     src/providers/hid/LogitechHidProvider.cpp
     src/providers/hid/LogitechHidProvider.h
+    src/providers/hid/MchoseHidProvider.cpp
+    src/providers/hid/MchoseHidProvider.h
     src/providers/hid/RazerHidProvider.cpp
     src/providers/hid/RazerHidProvider.h
 )
