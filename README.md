@@ -59,6 +59,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 - 支持开机自启并最小化到托盘
 - 支持浅色、深色、跟随系统主题
 - 支持中文界面
+- 支持通过沙箱化 JS 插件扩展 HID 设备，无需重新编译主程序
 - 支持 WebSocket JSON-RPC 接口，供 StreamDock、Home Assistant 等外部工具读取设备电量
 - 支持按设备查看电量历史图表，并按所选时间范围导出 CSV
 
@@ -75,6 +76,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 - `LogitechHidProvider`：通过 HID++ 2.0 的 Unified Battery、Battery Status 或 Battery Voltage 读取 Logitech 接收器设备的电量和充电状态
 - `VgnHidProvider`：通过 hidapi 读取 VGN / 关联品牌 2.4G 接收器设备电量
 - `RazerHidProvider`：通过 hidapi 读取 Razer 鼠标 / 键盘电量
+- `JsPluginProvider`：递归加载 exe 同级 `plugins` 目录中的 JS 插件，通过受限 HID API 适配私有协议设备
 
 ## 环境要求
 
@@ -133,6 +135,18 @@ bin/BatteryMonitor.exe
 历史数据保存在用户应用数据目录的 `battery-history.sqlite` 中。电量或连接状态变化时会立即记录，
 稳定期间每 5 分钟补充一条心跳记录；CSV 使用 UTF-8 编码，可直接交给 Excel 或分析脚本处理。
 
+## JS 插件
+
+对于通过 HID output/input report 或 feature report 查询电量的设备，可以使用 JS 插件新增
+支持，无需修改和重新编译 BatteryMonitor。程序启动时会递归扫描 exe 同级的 `plugins`
+目录；使用 CMake 构建时，仓库内的 `plugins` 目录会自动复制到输出目录。
+
+插件运行在受限的 QuickJS 沙箱中，不具备文件、网络或进程访问能力，但可以向匹配的 HID
+设备发送数据包，因此仍应只使用可信插件。
+
+完整的安装方式、插件结构、宿主 API 和调试方法见
+[JS 插件开发指南](docs/js-plugin.md)。
+
 ## WebSocket API
 
 BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开启后，外部工具（如 StreamDock、Home Assistant、Rainmeter、自写看板）可通过 JSON-RPC 获取设备电量快照、订阅实时更新、触发刷新、读写全局与按设备的偏好设置。
@@ -163,6 +177,9 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 ├── src/providers/hid                # AULA / Logitech / VGN / Razer HID Provider
 ├── src/providers/xbox               # Xbox Provider
 ├── src/rpc                          # WebSocket JSON-RPC 服务
+├── src/scripting                    # QuickJS 沙箱、HID 桥接与 JS 插件加载
+├── plugins                          # 随构建复制的 JS 设备插件
+├── docs                             # JS 插件与 WebSocket API 文档
 ├── util                             # 设置、日志、版本信息
 ├── lang                             # Qt 翻译文件
 ├── res                              # 图标和 Qt 资源
@@ -177,7 +194,9 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 - 经典蓝牙音频设备优先看 `ClassicBluetoothProvider`
 - Apple 音频设备优先看 `AirPodsProvider`
 - XInput / Windows 游戏控制器设备优先看 `XboxProvider`
-- 2.4G 接收器或私有协议设备需要按 HID 协议扩展 `src/providers/hid`
+- 2.4G 接收器或 HID 私有协议设备优先编写 JS 插件；API 和示例见
+  [JS 插件开发指南](docs/js-plugin.md)
+- JS API 无法表达的协议再扩展 `src/providers/hid` 中的原生 Provider
 
 新增 Provider 后，在 `main.cpp` 中注册到 `BatteryManager` 即可接入现有 UI、托盘、低电量提醒和缓存逻辑。
 

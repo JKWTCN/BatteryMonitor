@@ -83,7 +83,9 @@ constexpr RazerDeviceEntry kRazerDevices[] = {
     {0x007C, L"Razer DeathAdder V2 Pro (Wired)", RazerKind::Mouse, 0x3F, kWaitViperMs, false, true},
     {0x007D, L"Razer DeathAdder V2 Pro (Wireless)", RazerKind::Mouse, 0x3F, kWaitViperMs, false, false},
     {0x0080, L"Razer Pro Click (Wired)", RazerKind::Mouse, 0x1F, kWaitNewReceiverMs, false, true},
-    {0x0083, L"Razer Basilisk X HyperSpeed", RazerKind::Mouse, 0xFF, kWaitNewReceiverMs, true, false},
+    // 0x0083 Basilisk X HyperSpeed 改由 JS 插件支持
+    // (plugins/examples/razer-basilisk-x-hyperspeed.js)。
+    // {0x0083, L"Razer Basilisk X HyperSpeed", RazerKind::Mouse, 0xFF, kWaitNewReceiverMs, true, false},
     {0x0086, L"Razer Basilisk Ultimate (Wired)", RazerKind::Mouse, 0x1F, kWaitNewReceiverMs, false, true},
     {0x0088, L"Razer Basilisk Ultimate Receiver", RazerKind::Mouse, 0x1F, kWaitNewReceiverMs, false, false},
     {0x008F, L"Razer Naga Pro (Wired)", RazerKind::Mouse, 0x1F, kWaitNewReceiverMs, false, true},

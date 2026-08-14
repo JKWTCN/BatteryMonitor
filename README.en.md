@@ -59,6 +59,7 @@ Note: AULA / AJAZZ wired USB keyboard bodies are not included in the current HID
 - Start with Windows and minimize to tray
 - Light, dark, and system theme modes
 - Chinese UI support
+- Sandboxed JavaScript plugins for adding HID devices without rebuilding the application
 - Built-in WebSocket JSON-RPC interface for external tools like StreamDock and Home Assistant to read device battery data
 - Per-device battery history charts with CSV export for the selected time range
 
@@ -75,6 +76,7 @@ The project is split into several providers by device source:
 - `LogitechHidProvider`: reads Logitech receiver-device battery and charging state through HID++ 2.0 Unified Battery, Battery Status, or Battery Voltage
 - `VgnHidProvider`: reads VGN / related-brand 2.4G dongle device battery through hidapi
 - `RazerHidProvider`: reads Razer mouse / keyboard battery through hidapi
+- `JsPluginProvider`: recursively loads JavaScript plugins from `plugins` next to the executable and exposes a restricted HID API for private protocols
 
 ## Requirements
 
@@ -135,6 +137,19 @@ History is stored in `battery-history.sqlite` under the user application-data di
 Changes are recorded immediately and stable readings receive a five-minute heartbeat.
 CSV files use UTF-8 and can be opened directly by Excel or analysis scripts.
 
+## JavaScript Plugins
+
+Devices whose battery is queried through HID output/input reports or feature reports can be added
+with JavaScript plugins, without modifying or rebuilding BatteryMonitor. At startup, the application
+recursively scans the `plugins` directory next to the executable. CMake automatically copies the
+repository's `plugins` directory to the output directory during a build.
+
+Plugins run in a restricted QuickJS sandbox without filesystem, network, or process access. They can
+still send packets to matching HID devices, so only trusted plugins should be used.
+
+For installation, plugin structure, host APIs, and debugging instructions, see the
+[JavaScript Plugin Guide](docs/js-plugin-en.md).
+
 ## WebSocket API
 
 BatteryMonitor includes a built-in WebSocket JSON-RPC 2.0 server, disabled by default. Once enabled, external tools (such as StreamDock, Home Assistant, Rainmeter, or custom dashboards) can retrieve device battery snapshots, subscribe to real-time updates, trigger refreshes, and read/write global and per-device preferences via JSON-RPC.
@@ -165,6 +180,9 @@ A ready-to-use test page is also included at [docs/websocket-test.html](docs/web
 ├── src/providers/hid                # AULA / Logitech / VGN / Razer HID providers
 ├── src/providers/xbox               # Xbox provider
 ├── src/rpc                          # WebSocket JSON-RPC server
+├── src/scripting                    # QuickJS sandbox, HID bridge, and JavaScript plugin loader
+├── plugins                          # JavaScript device plugins copied during the build
+├── docs                             # JavaScript plugin and WebSocket API documentation
 ├── util                             # Settings, logging, version information
 ├── lang                             # Qt translation files
 ├── res                              # Icons and Qt resources
@@ -179,7 +197,9 @@ To add support for a new device, you usually need to add or extend the correspon
 - Classic Bluetooth audio devices: start with `ClassicBluetoothProvider`
 - Apple audio devices: start with `AirPodsProvider`
 - XInput / Windows game controllers: start with `XboxProvider`
-- 2.4G dongles or private-protocol devices: extend `src/providers/hid` according to the HID protocol
+- For 2.4G dongles or private HID protocols, prefer a JavaScript plugin; see the
+  [JavaScript Plugin Guide](docs/js-plugin-en.md)
+- Extend a native provider under `src/providers/hid` only when the JavaScript API cannot express the protocol
 
 After adding a provider, register it in `main.cpp` with `BatteryManager` to reuse the existing UI, tray, low battery notification, and cache logic.
 

@@ -11,6 +11,7 @@
 #include "src/providers/hid/VgnHidProvider.h"
 #include "src/providers/xbox/XboxProvider.h"
 #include "src/rpc/RpcServer.h"
+#include "src/scripting/JsPluginLoader.h"
 #include "util/AppSettings.h"
 #include "util/Logger.h"
 #include "GeneratedAppVersion.h"
@@ -23,191 +24,203 @@
 #include <QPalette>
 #include <QTranslator>
 
-#ifdef Q_OS_WIN
 #include <windows.h>
-#endif
 
 namespace
 {
-// 应用全局唯一翻译器（堆上，生命周期与 QApplication 相同）。
-// 切换语言时由 retranslate() 卸载并重新 load + install。
-QTranslator *g_translator = nullptr;
+    // 应用全局唯一翻译器（堆上，生命周期与 QApplication 相同）。
+    // 切换语言时由 retranslate() 卸载并重新 load + install。
+    QTranslator *g_translator = nullptr;
 
-#ifdef Q_OS_WIN
-constexpr wchar_t kSingleInstanceMutexName[] = L"Local\\BatteryMonitor.SingleInstance";
-constexpr wchar_t kShowMainWindowMessageName[] = L"BatteryMonitor.ShowMainWindow";
+    constexpr wchar_t kSingleInstanceMutexName[] = L"Local\\BatteryMonitor.SingleInstance";
+    constexpr wchar_t kShowMainWindowMessageName[] = L"BatteryMonitor.ShowMainWindow";
 
-class SingleInstanceGuard
-{
-public:
-    SingleInstanceGuard()
-        : m_message(RegisterWindowMessageW(kShowMainWindowMessageName))
+    class SingleInstanceGuard
     {
-        m_mutex = CreateMutexW(nullptr, FALSE, kSingleInstanceMutexName);
-        const DWORD error = GetLastError();
-        m_hasRunningInstance =
-            (m_mutex && error == ERROR_ALREADY_EXISTS) ||
-            (!m_mutex && error == ERROR_ACCESS_DENIED);
-    }
-
-    ~SingleInstanceGuard()
-    {
-        if (m_mutex) {
-            CloseHandle(m_mutex);
-        }
-    }
-
-    bool hasRunningInstance() const { return m_hasRunningInstance; }
-    UINT showMainWindowMessage() const { return m_message; }
-
-    void notifyRunningInstance() const
-    {
-        if (m_message != 0) {
-            PostMessageW(HWND_BROADCAST, m_message, 0, 0);
-        }
-    }
-
-private:
-    HANDLE m_mutex = nullptr;
-    UINT m_message = 0;
-    bool m_hasRunningInstance = false;
-};
-
-void showExistingMainWindow(MainWindow *window)
-{
-    if (!window) {
-        return;
-    }
-    window->showNormal();
-    window->raise();
-    window->activateWindow();
-}
-
-class ShowMainWindowEventFilter : public QAbstractNativeEventFilter
-{
-public:
-    ShowMainWindowEventFilter(MainWindow *window, UINT message)
-        : m_window(window), m_message(message)
-    {
-    }
-
-    bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override
-    {
-        Q_UNUSED(eventType);
-        Q_UNUSED(result);
-
-        if (m_message == 0 || !message) {
-            return false;
+    public:
+        SingleInstanceGuard()
+            : m_message(RegisterWindowMessageW(kShowMainWindowMessageName))
+        {
+            m_mutex = CreateMutexW(nullptr, FALSE, kSingleInstanceMutexName);
+            const DWORD error = GetLastError();
+            m_hasRunningInstance =
+                (m_mutex && error == ERROR_ALREADY_EXISTS) ||
+                (!m_mutex && error == ERROR_ACCESS_DENIED);
         }
 
-        const auto *msg = static_cast<MSG *>(message);
-        if (msg->message != m_message) {
-            return false;
-        }
-
-        showExistingMainWindow(m_window);
-        return true;
-    }
-
-private:
-    MainWindow *m_window = nullptr;
-    UINT m_message = 0;
-};
-#endif
-
-// 把指定语言代码加载为当前翻译。
-//   code 为空 -> 跟随系统（依次试 QLocale::system().uiLanguages()）。
-//   code 非空 -> 直接尝试 "BatteryMonitor_<code>"。
-void retranslate(const QString &code)
-{
-    if (!g_translator) {
-        return;
-    }
-    QCoreApplication::removeTranslator(g_translator);
-
-    bool loaded = false;
-    if (code.isEmpty()) {
-        // 跟随系统：选首个能 load 的翻译。
-        const QStringList uiLanguages = QLocale::system().uiLanguages();
-        for (const QString &locale : uiLanguages) {
-            const QString baseName = "BatteryMonitor_" + QLocale(locale).name();
-            if (g_translator->load(":/i18n/" + baseName)) {
-                loaded = true;
-                break;
+        ~SingleInstanceGuard()
+        {
+            if (m_mutex)
+            {
+                CloseHandle(m_mutex);
             }
         }
-    } else {
-        loaded = g_translator->load(":/i18n/BatteryMonitor_" + code);
+
+        bool hasRunningInstance() const { return m_hasRunningInstance; }
+        UINT showMainWindowMessage() const { return m_message; }
+
+        void notifyRunningInstance() const
+        {
+            if (m_message != 0)
+            {
+                PostMessageW(HWND_BROADCAST, m_message, 0, 0);
+            }
+        }
+
+    private:
+        HANDLE m_mutex = nullptr;
+        UINT m_message = 0;
+        bool m_hasRunningInstance = false;
+    };
+
+    void showExistingMainWindow(MainWindow *window)
+    {
+        if (!window)
+        {
+            return;
+        }
+        window->showNormal();
+        window->raise();
+        window->activateWindow();
     }
 
-    if (loaded) {
-        QCoreApplication::installTranslator(g_translator);
-    }
-}
+    class ShowMainWindowEventFilter : public QAbstractNativeEventFilter
+    {
+    public:
+        ShowMainWindowEventFilter(MainWindow *window, UINT message)
+            : m_window(window), m_message(message)
+        {
+        }
 
-// 构造与 mainwindow.cpp applyTheme() 中深色配色一致的深色调色板，
-// 浅色用 Qt 默认 palette。
-QPalette paletteForTheme(const QString &theme)
-{
-    if (theme == QLatin1String("dark")) {
-        QPalette pal;
-        pal.setColor(QPalette::Window, QColor(0x1c, 0x1c, 0x1e));
-        pal.setColor(QPalette::WindowText, QColor(0xf5, 0xf5, 0xf7));
-        pal.setColor(QPalette::Base, QColor(0x1c, 0x1c, 0x1e));
-        pal.setColor(QPalette::AlternateBase, QColor(0x24, 0x24, 0x26));
-        pal.setColor(QPalette::Text, QColor(0xf5, 0xf5, 0xf7));
-        pal.setColor(QPalette::Button, QColor(0x2c, 0x2c, 0x2e));
-        pal.setColor(QPalette::ButtonText, QColor(0xf5, 0xf5, 0xf7));
-        pal.setColor(QPalette::BrightText, Qt::white);
-        pal.setColor(QPalette::Highlight, QColor(0x0a, 0x84, 0xff));
-        pal.setColor(QPalette::HighlightedText, Qt::white);
-        pal.setColor(QPalette::ToolTipBase, QColor(0x2c, 0x2c, 0x2e));
-        pal.setColor(QPalette::ToolTipText, QColor(0xf5, 0xf5, 0xf7));
-        return pal;
-    }
-    if (theme == QLatin1String("light")) {
-        QPalette pal;
-        pal.setColor(QPalette::Window, QColor(0xf5, 0xf5, 0xf7));
-        pal.setColor(QPalette::WindowText, QColor(0x1d, 0x1d, 0x1f));
-        pal.setColor(QPalette::Base, QColor(0xff, 0xff, 0xff));
-        pal.setColor(QPalette::AlternateBase, QColor(0xfb, 0xfb, 0xfd));
-        pal.setColor(QPalette::Text, QColor(0x1d, 0x1d, 0x1f));
-        pal.setColor(QPalette::Button, QColor(0xff, 0xff, 0xff));
-        pal.setColor(QPalette::ButtonText, QColor(0x1d, 0x1d, 0x1f));
-        pal.setColor(QPalette::BrightText, Qt::black);
-        pal.setColor(QPalette::Highlight, QColor(0x00, 0x7a, 0xff));
-        pal.setColor(QPalette::HighlightedText, Qt::white);
-        pal.setColor(QPalette::ToolTipBase, QColor(0xff, 0xff, 0xff));
-        pal.setColor(QPalette::ToolTipText, QColor(0x1d, 0x1d, 0x1f));
-        return pal;
-    }
-    // system: 恢复 Qt 默认 palette。
-    return QPalette();
-}
+        bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override
+        {
+            Q_UNUSED(eventType);
+            Q_UNUSED(result);
 
-void applyApplicationTheme(const QString &theme)
-{
-    if (theme == QLatin1String("system")) {
-        // 让 Qt 重新采用系统 palette。
-        QApplication::setPalette(QPalette());
-    } else {
-        QApplication::setPalette(paletteForTheme(theme));
+            if (m_message == 0 || !message)
+            {
+                return false;
+            }
+
+            const auto *msg = static_cast<MSG *>(message);
+            if (msg->message != m_message)
+            {
+                return false;
+            }
+
+            showExistingMainWindow(m_window);
+            return true;
+        }
+
+    private:
+        MainWindow *m_window = nullptr;
+        UINT m_message = 0;
+    };
+
+    // 把指定语言代码加载为当前翻译。
+    //   code 为空 -> 跟随系统（依次试 QLocale::system().uiLanguages()）。
+    //   code 非空 -> 直接尝试 "BatteryMonitor_<code>"。
+    void retranslate(const QString &code)
+    {
+        if (!g_translator)
+        {
+            return;
+        }
+        QCoreApplication::removeTranslator(g_translator);
+
+        bool loaded = false;
+        if (code.isEmpty())
+        {
+            // 跟随系统：选首个能 load 的翻译。
+            const QStringList uiLanguages = QLocale::system().uiLanguages();
+            for (const QString &locale : uiLanguages)
+            {
+                const QString baseName = "BatteryMonitor_" + QLocale(locale).name();
+                if (g_translator->load(":/i18n/" + baseName))
+                {
+                    loaded = true;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            loaded = g_translator->load(":/i18n/BatteryMonitor_" + code);
+        }
+
+        if (loaded)
+        {
+            QCoreApplication::installTranslator(g_translator);
+        }
     }
-    // QApplication::setPalette 会自动派发 ApplicationPaletteChange，
-    // MainWindow::changeEvent 会据此刷新主题与表格。
-}
+
+    // 构造与 mainwindow.cpp applyTheme() 中深色配色一致的深色调色板，
+    // 浅色用 Qt 默认 palette。
+    QPalette paletteForTheme(const QString &theme)
+    {
+        if (theme == QLatin1String("dark"))
+        {
+            QPalette pal;
+            pal.setColor(QPalette::Window, QColor(0x1c, 0x1c, 0x1e));
+            pal.setColor(QPalette::WindowText, QColor(0xf5, 0xf5, 0xf7));
+            pal.setColor(QPalette::Base, QColor(0x1c, 0x1c, 0x1e));
+            pal.setColor(QPalette::AlternateBase, QColor(0x24, 0x24, 0x26));
+            pal.setColor(QPalette::Text, QColor(0xf5, 0xf5, 0xf7));
+            pal.setColor(QPalette::Button, QColor(0x2c, 0x2c, 0x2e));
+            pal.setColor(QPalette::ButtonText, QColor(0xf5, 0xf5, 0xf7));
+            pal.setColor(QPalette::BrightText, Qt::white);
+            pal.setColor(QPalette::Highlight, QColor(0x0a, 0x84, 0xff));
+            pal.setColor(QPalette::HighlightedText, Qt::white);
+            pal.setColor(QPalette::ToolTipBase, QColor(0x2c, 0x2c, 0x2e));
+            pal.setColor(QPalette::ToolTipText, QColor(0xf5, 0xf5, 0xf7));
+            return pal;
+        }
+        if (theme == QLatin1String("light"))
+        {
+            QPalette pal;
+            pal.setColor(QPalette::Window, QColor(0xf5, 0xf5, 0xf7));
+            pal.setColor(QPalette::WindowText, QColor(0x1d, 0x1d, 0x1f));
+            pal.setColor(QPalette::Base, QColor(0xff, 0xff, 0xff));
+            pal.setColor(QPalette::AlternateBase, QColor(0xfb, 0xfb, 0xfd));
+            pal.setColor(QPalette::Text, QColor(0x1d, 0x1d, 0x1f));
+            pal.setColor(QPalette::Button, QColor(0xff, 0xff, 0xff));
+            pal.setColor(QPalette::ButtonText, QColor(0x1d, 0x1d, 0x1f));
+            pal.setColor(QPalette::BrightText, Qt::black);
+            pal.setColor(QPalette::Highlight, QColor(0x00, 0x7a, 0xff));
+            pal.setColor(QPalette::HighlightedText, Qt::white);
+            pal.setColor(QPalette::ToolTipBase, QColor(0xff, 0xff, 0xff));
+            pal.setColor(QPalette::ToolTipText, QColor(0x1d, 0x1d, 0x1f));
+            return pal;
+        }
+        // system: 恢复 Qt 默认 palette。
+        return QPalette();
+    }
+
+    void applyApplicationTheme(const QString &theme)
+    {
+        if (theme == QLatin1String("system"))
+        {
+            // 让 Qt 重新采用系统 palette。
+            QApplication::setPalette(QPalette());
+        }
+        else
+        {
+            QApplication::setPalette(paletteForTheme(theme));
+        }
+        // QApplication::setPalette 会自动派发 ApplicationPaletteChange，
+        // MainWindow::changeEvent 会据此刷新主题与表格。
+    }
 } // namespace
 
 int main(int argc, char *argv[])
 {
-#ifdef Q_OS_WIN
     SingleInstanceGuard singleInstance;
-    if (singleInstance.hasRunningInstance()) {
+    if (singleInstance.hasRunningInstance())
+    {
         LOG_W(L"BatteryMonitor instance already running; notifying existing instance");
         singleInstance.notifyRunningInstance();
         return 0;
     }
-#endif
 
     QApplication a(argc, argv);
     a.setApplicationName(QStringLiteral("BatteryMonitor"));
@@ -255,6 +268,17 @@ int main(int argc, char *argv[])
     manager.addProvider(std::make_unique<RazerHidProvider>());
     manager.addProvider(std::make_unique<VgnHidProvider>());
 
+    // JS 插件：把 .js 文件放进 exe 同级 plugins/ 目录即可新增
+    // 设备支持，无需重编译。加载 / 沙箱 / 失败停用见 docs/js-plugin.md。
+    if (AppSettings::pluginsEnabled())
+    {
+        for (auto &plugin :
+             JsPluginLoader::discover(JsPluginLoader::defaultPluginDir()))
+        {
+            manager.addProvider(std::move(plugin));
+        }
+    }
+
     // 历史服务必须在首次 Provider 刷新前接入，避免漏掉启动快照。
     BatteryHistoryStore historyStore;
     QObject::connect(&manager, &BatteryManager::devicesUpdated,
@@ -273,49 +297,56 @@ int main(int argc, char *argv[])
         args.contains(QStringLiteral("--websocket_server"), Qt::CaseInsensitive);
     int cliPort = -1;
     const int portIdx = args.indexOf(QStringLiteral("--port"));
-    if (portIdx >= 0 && portIdx + 1 < args.size()) {
+    if (portIdx >= 0 && portIdx + 1 < args.size())
+    {
         bool ok = false;
         const int parsed = args.at(portIdx + 1).toInt(&ok);
         if (ok && parsed >= AppSettings::kMinRpcPort &&
-            parsed <= AppSettings::kMaxRpcPort) {
+            parsed <= AppSettings::kMaxRpcPort)
+        {
             cliPort = parsed;
-        } else {
+        }
+        else
+        {
             LOG_WARN_W(L"--port value invalid or out of range, ignored");
         }
     }
 
     RpcServer *rpcServer = nullptr;
     const bool wantServer = cliStartServer || AppSettings::rpcEnabled();
-    if (wantServer) {
+    if (wantServer)
+    {
         rpcServer = new RpcServer(&manager, &a);
         const QString host = AppSettings::rpcHost();
         const int port = cliPort > 0 ? cliPort : AppSettings::rpcPort();
         const QString token = AppSettings::rpcToken();
-        if (!rpcServer->start(host, port, token)) {
+        if (!rpcServer->start(host, port, token))
+        {
             LOG_WARN_W(L"RpcServer failed to start (port may be in use)");
         }
     }
 
     MainWindow w(&manager, &historyStore);
     w.setRpcServer(rpcServer);
-#ifdef Q_OS_WIN
     ShowMainWindowEventFilter showMainWindowEventFilter(&w, singleInstance.showMainWindowMessage());
     a.installNativeEventFilter(&showMainWindowEventFilter);
-#endif
 
     manager.start();
 
     // --minimized：开机自启时由注册表命令行追加，让程序静默进入托盘，
     // 不弹主窗口。普通双击启动不带这个参数，正常显示窗口。
     const bool startMinimized = QCoreApplication::arguments()
-        .contains(QStringLiteral("--minimized"), Qt::CaseInsensitive);
+                                    .contains(QStringLiteral("--minimized"), Qt::CaseInsensitive);
     LOG_W(std::wstring(L"BatteryMonitor start minimized: ") +
           (startMinimized ? L"true" : L"false"));
-    if (startMinimized) {
+    if (startMinimized)
+    {
         // 不调用 show*()，窗口保持隐藏；托盘图标已由 MainWindow 构造时建立。
         // 首次自启也提示一下用户程序在托盘里（避免“装了找不到”的困惑）。
         w.showTrayHintOnce();
-    } else {
+    }
+    else
+    {
         w.showNormal();
         w.raise();
         w.activateWindow();
@@ -324,12 +355,13 @@ int main(int argc, char *argv[])
     // 设置页语言/主题切换 -> 立即生效。
     //   languageChanged: 重新 load + install translator，再回调界面重译。
     //   themeChanged:    重新设置 application palette（changeEvent 自动联动）。
-    QObject::connect(&w, &MainWindow::languageChanged, &a, [&w](const QString &code) {
+    QObject::connect(&w, &MainWindow::languageChanged, &a, [&w](const QString &code)
+                     {
         retranslate(code);
-        w.retranslateUi();
-    });
+        w.retranslateUi(); });
     QObject::connect(&w, &MainWindow::themeChanged, &a,
-                     [](const QString &theme) { applyApplicationTheme(theme); });
+                     [](const QString &theme)
+                     { applyApplicationTheme(theme); });
 
     return QCoreApplication::exec();
 }

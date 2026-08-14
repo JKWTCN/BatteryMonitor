@@ -296,11 +296,7 @@ QJsonObject RpcServer::methodSystemGetInfo(Session & /*s*/, const QJsonObject & 
     r["name"] = QStringLiteral("BatteryMonitor");
     r["version"] = QCoreApplication::applicationVersion();
     r["apiVersion"] = QStringLiteral("1.0");
-#ifdef Q_OS_WIN
     r["platform"] = QStringLiteral("windows");
-#else
-    r["platform"] = QStringLiteral("unknown");
-#endif
     static const qint64 startedAt = QDateTime::currentMSecsSinceEpoch();
     r["startedAt"] = startedAt;
     r["uptime"] = QDateTime::currentMSecsSinceEpoch() - startedAt;

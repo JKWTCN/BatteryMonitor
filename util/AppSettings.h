@@ -67,6 +67,19 @@ public:
     // 这样开机时程序直接进入托盘，不弹窗口。
     static bool setStartupAutoStart(bool enabled);
 
+    // —— JS 插件(<exe目录>/plugins/**/*.js)——
+    //
+    // 三个键(持久化在 QSettings 根下):
+    //   - plugins/enabled          : bool,插件总开关,默认 true。
+    //   - plugins/disabled/<id>    : bool,单插件停用;id 为相对插件路径去 .js。
+    //                                 连续多轮异常的插件会被程序自动停用,
+    //                                 置 false 可在下次启动重新启用。
+    static bool pluginsEnabled();
+    static void setPluginsEnabled(bool enabled);
+
+    static bool pluginDisabled(const QString &pluginId);
+    static void setPluginDisabled(const QString &pluginId, bool disabled);
+
     // —— WebSocket JSON-RPC Server ——
     //
     // 四个键（持久化在 QSettings 根下）：

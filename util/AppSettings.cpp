@@ -2,12 +2,10 @@
 
 #include <QSettings>
 
-#ifdef Q_OS_WIN
 #include <QCoreApplication>
 #include <QDir>
 #include <QStringList>
 #include <windows.h>
-#endif
 
 namespace
 {
@@ -26,7 +24,32 @@ const QString kDefaultTheme = QStringLiteral("system");
 constexpr int kDefaultStaleRetentionSec = 180;   // 3 分钟
 constexpr bool kDefaultHideUnpairedAirPods = true;
 constexpr int kDefaultHistoryRetentionDays = 30;
+
+// —— JS 插件 ——
+constexpr auto kKeyPluginsEnabled = "plugins/enabled";
+const QString kKeyPluginDisabledPrefix = QStringLiteral("plugins/disabled/");
+constexpr bool kDefaultPluginsEnabled = true;
 } // namespace
+
+bool AppSettings::pluginsEnabled()
+{
+    return QSettings().value(kKeyPluginsEnabled, kDefaultPluginsEnabled).toBool();
+}
+
+void AppSettings::setPluginsEnabled(bool enabled)
+{
+    QSettings().setValue(kKeyPluginsEnabled, enabled);
+}
+
+bool AppSettings::pluginDisabled(const QString &pluginId)
+{
+    return QSettings().value(kKeyPluginDisabledPrefix + pluginId, false).toBool();
+}
+
+void AppSettings::setPluginDisabled(const QString &pluginId, bool disabled)
+{
+    QSettings().setValue(kKeyPluginDisabledPrefix + pluginId, disabled);
+}
 
 int AppSettings::refreshInterval()
 {
@@ -165,7 +188,6 @@ void AppSettings::setRpcToken(const QString &token)
 // 值写成带引号的 exe 路径 + " --minimized"，开机后程序据此直接进托盘。
 //
 // 注意：命令行参数用程序自己解析的 "--minimized"（main.cpp），不依赖系统语义。
-#ifdef Q_OS_WIN
 namespace
 {
 // 自启在注册表里的值名（用 applicationName，默认 "BatteryMonitor"）。
@@ -224,11 +246,9 @@ void clearStartupApprovedState(const QString &valueName)
     RegCloseKey(key);
 }
 } // namespace
-#endif
 
 bool AppSettings::startupAutoStart()
 {
-#ifdef Q_OS_WIN
     const QString valueName = QCoreApplication::applicationName();
 
     HKEY key = nullptr;
@@ -258,14 +278,10 @@ bool AppSettings::startupAutoStart()
     // 只要键存在且非空就视为启用（不严格匹配命令行内容，
     // 这样用户从外部改过路径/参数也能正确显示为“已启用”）。
     return bufferSize > sizeof(WCHAR); // 至少有一个非结束符的字符
-#else
-    return false;
-#endif
 }
 
 bool AppSettings::setStartupAutoStart(bool enabled)
 {
-#ifdef Q_OS_WIN
     HKEY key = nullptr;
     const QString keyPath = QString::fromUtf8(kRunKeyPath);
     const LSTATUS openStatus = RegCreateKeyExW(
@@ -299,8 +315,4 @@ bool AppSettings::setStartupAutoStart(bool enabled)
     }
     clearStartupApprovedState(valueName);
     return true;
-#else
-    Q_UNUSED(enabled)
-    return false;
-#endif
 }
