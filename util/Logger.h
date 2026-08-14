@@ -2,16 +2,14 @@
 
 #include <string>
 
-// 极简文件日志器（纯 C++ / Win32，零 Qt 依赖，便于跨项目复用）。
+// 跨平台文件日志器。使用 Qt 处理路径、Unicode、时间和文件 I/O。
 //
 // 设计要点：
-//   - 日志写入 %APPDATA%/BatteryMonitor/BatteryMonitor.log
-//     （Windows 上即 C:/Users/<user>/AppData/Roaming/BatteryMonitor/）。
+//   - 日志写入系统的 GenericDataLocation/BatteryMonitor/BatteryMonitor.log。
 //   - 支持日志等级：Verbose / Info / Warning / Error，可设最小输出等级做过滤。
 //   - 同时支持 std::string（UTF-8）与 std::wstring（宽字符，Win32/WinRT 常返回），
 //     内部统一以 UTF-8 写入文件，不会乱码。
-//   - 线程安全（SRWLock）；单文件超过 maxBytes 时截断重写。
-//   - 不依赖任何第三方库，可被任意 Win32 C++ 项目直接复用。
+//   - 线程安全；单文件超过 maxBytes 时截断重写。
 //
 // 等级说明：
 //   - Verbose: 高频诊断明细（如每轮刷新的逐设备读数）。默认被丢弃，
@@ -50,7 +48,7 @@ public:
     // 必须在首次写日志前调用效果最佳（运行中修改也会即时生效）。
     void setLevel(Level level);
 
-    // 设置日志目录名（%APPDATA% 下的子目录名），默认 "BatteryMonitor"。
+    // 设置日志目录名（GenericDataLocation 下的子目录），默认 "BatteryMonitor"。
     // 必须在首次写日志前调用。
     void setDirName(const std::wstring &dirName);
 
@@ -73,7 +71,7 @@ private:
     // 懒初始化：首次写日志时解析路径并确保目录存在。
     void ensureInitialized();
 
-    // 解析最终日志文件路径（%APPDATA%/<dirName>/<fileName>）。
+    // 解析最终日志文件路径。
     std::wstring resolveFilePath();
 
     // 文件超过上限时清空重写。

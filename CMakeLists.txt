@@ -77,8 +77,12 @@ set(APP_PROVIDER_FILES
     src/providers/hid/AulaHidProvider.h
     src/providers/hid/AsusRogHidProvider.cpp
     src/providers/hid/AsusRogHidProvider.h
+    src/providers/hid/AsusMouseHidProvider.cpp
+    src/providers/hid/AsusMouseHidProvider.h
     src/providers/hid/LogitechHidProvider.cpp
     src/providers/hid/LogitechHidProvider.h
+    src/providers/hid/MchoseHidProvider.cpp
+    src/providers/hid/MchoseHidProvider.h
     src/providers/hid/VgnHidProvider.cpp
     src/providers/hid/VgnHidProvider.h
     src/providers/hid/RazerHidProvider.cpp

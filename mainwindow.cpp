@@ -245,7 +245,22 @@ QIcon drawBatteryIcon(BatteryLevel level, int size)
 
 QIcon appIcon()
 {
-    return QIcon(QStringLiteral(":/icons/app.png"));
+    // 直接把单张 512px 的 PNG 喂给 QIcon 时，QIcon 只会保留这一个源；
+    // Windows 托盘区需要 16/20/32px 之类的小尺寸，靠系统临时下采样时
+    // 经常缩成空白。这里预先按常用档位生成多分辨率源，让 QIcon /
+    // 系统托盘能直接命中匹配尺寸，避免无设备时托盘显示空白。
+    static QIcon icon;
+    if (icon.isNull()) {
+        const QPixmap source(QStringLiteral(":/icons/app.png"));
+        for (const int size : {16, 20, 24, 32, 48, 64, 128, 256}) {
+            icon.addPixmap(source.scaled(
+                size, size,
+                Qt::KeepAspectRatio,
+                Qt::SmoothTransformation));
+        }
+        icon.addPixmap(source); // 原图兜底（512）。
+    }
+    return icon;
 }
 
 // 找到列表中电量最低的设备，用于托盘 / 窗口图标。

@@ -19,14 +19,17 @@ Only the following devices have been tested so far:
 | Generic Bluetooth devices               | No fixed USB VID/PID; uses Windows Bluetooth device information           | Verified            |
 | AULA F87ProV2D + AULA F87ProV2D Dongle | VID`0x0C45` / PID `0xFEFE`                                            | Verified            |
 | AJAZZ MK87PRO + HS USB Dongle           | VID`0x0C45` / PID `0xFEFC`                                            | Verified            |
+| ATK V75X + ATK V75X Dongle             | VID`0x320F` / PID `0x5055` (USB), PID `0x5088` (dongle)                    | Verified            |
 | VGN DragonFly F2 Pro Max + Dongle       | VGN MouseEnc protocol family; actual VID/PID depends on the device report | Verified            |
 | AirPods 2                               | Apple Company ID`0x004C` / Model ID `0x200F`                          | Verified            |
 | Xbox controller                         | VID`0x045E`; PID depends on the exact model                             | Verified            |
 | Razer Basilisk X HyperSpeed + Dongle    | VID`0x1532` / PID `0x0083`                                            | Verified            |
 | Razer BlackWidow V4 Mini HyperSpeed (Wireless) | VID`0x1532` / PID `0x02BA`                                            | Verified            |
 | ROG Strix Scope RX TKL Wireless Deluxe + Dongle | VID`0x0B05` / PID `0x1A07`                                         | Verified            |
+| ROG Keris Wireless AimPoint                     | VID`0x0B05` / PID `0x1A66` (wired) or `0x1A68` (2.4G)              | Verified            |
 | Logitech MX Master 4 + Bolt receiver     | VID`0x046D` / PID `0xC548`, HID++ 2.0 `0x1004`                        | Verified            |
 | Razer Mouse Dock Pro + Razer Basilisk V3 Pro 35K (Wireless) | VID`0x1532` / PID `0x00A4` (dock) + PID `0x00CD` (mouse) | Verified |
+| MCHOSE A7 V2 Pro (wired)                 | VID`0x3837` / PID `0x4018`; precise battery percentage and charging state | Verified |
 
 ## Theoretically Supported Devices
 
@@ -37,7 +40,9 @@ Besides the verified devices above, the code also contains adapter logic for som
 | AULA / AJAZZ 2.4G dongle devices                   | VID`0x0C45`, 2.4G dongle PID allowlist only                                         | Theoretical, unverified |
 | VGN / related-brand 2.4G dongle keyboards and mice | Multiple VID/PID values, built-in protocol families and partial VID fallback matching | Theoretical, unverified |
 | Razer mice / keyboards                             | VID`0x1532`, built-in PID table                                                     | Theoretical, unverified |
+| ASUS ROG / TUF mice                                | VID`0x0B05`; Chakram, Gladius, Harpe, Keris, Pugio, Spatha, Strix, TUF, and related models in the built-in PID table | Theoretical, unverified |
 | Logitech HID++ 2.0 receiver devices                | Bolt / Unifying / Nano / Lightspeed; battery features `0x1004` / `0x1000` / `0x1001` | Theoretical, unverified |
+| MCHOSE A7 V2 series mice                           | Wired VID`0x3837` / PID `0x4018`, `0x4019`, `0x4021`, or `0x4023`; 1K/8K dongle PID `0x100A` / `0x100B`; 8K MagDock VID`0x5253` / PID `0x1020` | Partially verified |
 | AirPods / Beats series                             | Apple Company ID`0x004C`, built-in Model ID table                                   | Theoretical, unverified |
 | Xbox / XInput / Windows game controllers           | Microsoft VID`0x045E` or Windows controller interfaces                              | Theoretical, unverified |
 | Standard BLE Battery Service devices               | BLE GATT Battery Service, no fixed USB VID/PID                                        | Theoretical, unverified |
@@ -73,7 +78,9 @@ The project is split into several providers by device source:
 - `XboxProvider`: reads Xbox controller battery through XInput, RawGameController, and Windows device properties
 - `AulaHidProvider`: reads AULA 2.4G dongle device battery through hidapi
 - `AsusRogHidProvider`: reads battery level and charging state from the ROG Strix Scope RX TKL Wireless Deluxe dongle through hidapi
+- `AsusMouseHidProvider`: reads battery level and charging state from ASUS ROG / TUF mice through hidapi
 - `LogitechHidProvider`: reads Logitech receiver-device battery and charging state through HID++ 2.0 Unified Battery, Battery Status, or Battery Voltage
+- `MchoseHidProvider`: reads precise battery percentage and charging state from MCHOSE A7 V2 series mice in wired, 1K/8K dongle, and 8K MagDock modes through hidapi; unsupported duplicate HID collections are skipped automatically
 - `VgnHidProvider`: reads VGN / related-brand 2.4G dongle device battery through hidapi
 - `RazerHidProvider`: reads Razer mouse / keyboard battery through hidapi
 - `JsPluginProvider`: recursively loads JavaScript plugins from `plugins` next to the executable and exposes a restricted HID API for private protocols
@@ -169,6 +176,8 @@ Listens on `ws://127.0.0.1:19211/` by default (localhost only, no auth required)
 
 A ready-to-use test page is also included at [docs/websocket-test.html](docs/websocket-test.html) — open it directly in a browser to connect to the server, call all methods, view real-time push and device details, with Chinese/English language switching.
 
+Companion StreamDock plugin: [JKWTCN/BatteryMonitorDock](https://github.com/JKWTCN/BatteryMonitorDock).
+
 ## Project Structure
 
 ```text
@@ -177,7 +186,7 @@ A ready-to-use test page is also included at [docs/websocket-test.html](docs/web
 ├── mainwindow.cpp / mainwindow.h     # Main window, tray, settings page, device detail page
 ├── src/core                         # Device model, provider interface, BatteryManager aggregation logic
 ├── src/providers/bluetooth          # Bluetooth / AirPods providers
-├── src/providers/hid                # AULA / Logitech / VGN / Razer HID providers
+├── src/providers/hid                # AULA / ASUS / Logitech / MCHOSE / VGN / Razer HID providers
 ├── src/providers/xbox               # Xbox provider
 ├── src/rpc                          # WebSocket JSON-RPC server
 ├── src/scripting                    # QuickJS sandbox, HID bridge, and JavaScript plugin loader

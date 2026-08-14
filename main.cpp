@@ -1,13 +1,15 @@
 #include "mainwindow.h"
 #include "src/core/BatteryManager.h"
 #include "src/history/BatteryHistoryStore.h"
+#include "src/providers/hid/AsusMouseHidProvider.h"
+#include "src/providers/hid/AsusRogHidProvider.h"
+#include "src/providers/hid/LogitechHidProvider.h"
+#include "src/providers/hid/MchoseHidProvider.h"
+#include "src/providers/hid/RazerHidProvider.h"
 #include "src/providers/bluetooth/AirPodsProvider.h"
 #include "src/providers/bluetooth/BluetoothProvider.h"
 #include "src/providers/bluetooth/ClassicBluetoothProvider.h"
 #include "src/providers/hid/AulaHidProvider.h"
-#include "src/providers/hid/AsusRogHidProvider.h"
-#include "src/providers/hid/LogitechHidProvider.h"
-#include "src/providers/hid/RazerHidProvider.h"
 #include "src/providers/hid/VgnHidProvider.h"
 #include "src/providers/xbox/XboxProvider.h"
 #include "src/rpc/RpcServer.h"
@@ -252,7 +254,9 @@ int main(int argc, char *argv[])
     //   XboxProvider              —— XInput / RawGameController 手柄。
     //   AulaHidProvider           —— AULA 等 2.4G 接收器（HID Output/Input Report）。
     //   AsusRogHidProvider        —— ROG Strix Scope RX TKL 无线键盘接收器。
+    //   AsusMouseHidProvider      —— ASUS ROG / TUF 鼠标。
     //   LogitechHidProvider       —— Logitech 接收器设备（HID++ 2.0 电池协议）。
+    //   MchoseHidProvider         —— MCHOSE A7 V2 系列鼠标（有线 / Dongle）。
     //   RazerHidProvider          —— Razer 鼠标 / 键盘的 HID 电量读取。
     //   VgnHidProvider            —— VGN / 关联品牌 2.4G 接收器键盘 / 鼠标，
     //                                按协议族分派（ThreeMode / Weisheng / Beiying /
@@ -264,7 +268,9 @@ int main(int argc, char *argv[])
     manager.addProvider(std::make_unique<XboxProvider>());
     manager.addProvider(std::make_unique<AulaHidProvider>());
     manager.addProvider(std::make_unique<AsusRogHidProvider>());
+    manager.addProvider(std::make_unique<AsusMouseHidProvider>());
     manager.addProvider(std::make_unique<LogitechHidProvider>());
+    manager.addProvider(std::make_unique<MchoseHidProvider>());
     manager.addProvider(std::make_unique<RazerHidProvider>());
     manager.addProvider(std::make_unique<VgnHidProvider>());
 

@@ -19,14 +19,17 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 | 普通蓝牙设备                           | 无固定 USB VID/PID，走 Windows 蓝牙设备信息      | 已验证   |
 | AULA F87ProV2D + AULA F87ProV2D Dongle | VID`0x0C45` / PID `0xFEFE`                   | 已验证   |
 | AJAZZ MK87PRO + HS USB Dongle          | VID`0x0C45` / PID `0xFEFC`                   | 已验证   |
+| ATK V75X + ATK V75X Dongle            | VID`0x320F` / PID `0x5055`（USB），PID `0x5088`（Dongle） | 已验证   |
 | VGN DragonFly F2 Pro Max + Dongle     | VGN MouseEnc 协议族，VID/PID 以设备实际上报为准  | 已验证   |
 | AirPods 2                              | Apple Company ID`0x004C` / Model ID `0x200F` | 已验证   |
 | Xbox 手柄                              | VID`0x045E`，PID 依具体型号而定                | 已验证   |
 | Razer Basilisk X HyperSpeed + Dongle   | VID`0x1532` / PID `0x0083`                   | 已验证   |
 | Razer BlackWidow V4 Mini HyperSpeed (Wireless) | VID`0x1532` / PID `0x02BA`                   | 已验证   |
 | ROG Strix Scope RX TKL Wireless Deluxe + Dongle | VID`0x0B05` / PID `0x1A07`                | 已验证   |
+| ROG Keris Wireless AimPoint                    | VID`0x0B05` / PID `0x1A66`（有线）或 `0x1A68`（2.4G） | 已验证   |
 | Logitech MX Master 4 + Bolt 接收器       | VID`0x046D` / PID `0xC548`，HID++ 2.0 `0x1004` | 已验证   |
 | Razer Mouse Dock Pro + Razer Basilisk V3 Pro 35K (Wireless) | VID`0x1532` / PID `0x00A4` (底座) + PID `0x00CD` (鼠标) | 已验证 |
+| MCHOSE A7 V2 Pro（有线）                | VID`0x3837` / PID `0x4018`，支持精确电量和充电状态 | 已验证 |
 
 ## 理论支持设备
 
@@ -37,7 +40,9 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 | AULA / AJAZZ 2.4G 接收器设备         | VID`0x0C45`，仅启用 2.4G dongle PID 白名单     | 理论支持，未验证 |
 | VGN / 关联品牌 2.4G 接收器键盘、鼠标 | 多个 VID/PID，代码内置协议族和部分 VID 兜底匹配  | 理论支持，未验证 |
 | Razer 鼠标 / 键盘                    | VID`0x1532`，代码内置 PID 表                   | 理论支持，未验证 |
+| ASUS ROG / TUF 鼠标                  | VID`0x0B05`；Chakram、Gladius、Harpe、Keris、Pugio、Spatha、Strix、TUF 等型号，代码内置 PID 表 | 理论支持，未验证 |
 | Logitech HID++ 2.0 接收器设备        | Bolt / Unifying / Nano / Lightspeed；电池 Feature `0x1004` / `0x1000` / `0x1001` | 理论支持，未验证 |
+| MCHOSE A7 V2 系列鼠标                 | 有线 VID`0x3837` / PID `0x4018`、`0x4019`、`0x4021`、`0x4023`；1K/8K Dongle PID `0x100A` / `0x100B`；8K MagDock VID`0x5253` / PID `0x1020` | 部分验证 |
 | AirPods / Beats 系列                 | Apple Company ID`0x004C`，代码内置 Model ID 表 | 理论支持，未验证 |
 | Xbox / XInput / Windows 游戏控制器   | Microsoft VID`0x045E` 或 Windows 控制器接口    | 理论支持，未验证 |
 | 标准 BLE 电量服务设备                | BLE GATT Battery Service，无固定 USB VID/PID     | 理论支持，未验证 |
@@ -73,7 +78,9 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 - `XboxProvider`：通过 XInput、RawGameController 和 Windows 设备属性读取 Xbox 手柄电量
 - `AulaHidProvider`：通过 hidapi 读取 AULA 2.4G 接收器设备电量
 - `AsusRogHidProvider`：通过 hidapi 读取 ROG Strix Scope RX TKL Wireless Deluxe 接收器设备电量和充电状态
+- `AsusMouseHidProvider`：通过 hidapi 读取 ASUS ROG / TUF 鼠标的电量和充电状态
 - `LogitechHidProvider`：通过 HID++ 2.0 的 Unified Battery、Battery Status 或 Battery Voltage 读取 Logitech 接收器设备的电量和充电状态
+- `MchoseHidProvider`：通过 hidapi 读取 MCHOSE A7 V2 系列鼠标在有线、1K/8K Dongle 和 8K MagDock 模式下的精确电量与充电状态；自动跳过不支持查询的重复 HID collection
 - `VgnHidProvider`：通过 hidapi 读取 VGN / 关联品牌 2.4G 接收器设备电量
 - `RazerHidProvider`：通过 hidapi 读取 Razer 鼠标 / 键盘电量
 - `JsPluginProvider`：递归加载 exe 同级 `plugins` 目录中的 JS 插件，通过受限 HID API 适配私有协议设备
@@ -166,6 +173,8 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 
 仓库还附带一个开箱即用的测试页面 [docs/websocket-test.html](docs/websocket-test.html)，浏览器直接打开即可连接服务、调用全部方法、查看实时推送与设备详情，支持中英文切换。
 
+配套的 StreamDock 插件：[JKWTCN/BatteryMonitorDock](https://github.com/JKWTCN/BatteryMonitorDock)。
+
 ## 项目结构
 
 ```text
@@ -174,7 +183,7 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 ├── mainwindow.cpp / mainwindow.h     # 主窗口、托盘、设置页、设备详情页
 ├── src/core                         # 设备模型、Provider 接口、BatteryManager 聚合逻辑
 ├── src/providers/bluetooth          # 蓝牙 / AirPods Provider
-├── src/providers/hid                # AULA / Logitech / VGN / Razer HID Provider
+├── src/providers/hid                # AULA / ASUS / Logitech / MCHOSE / VGN / Razer HID Provider
 ├── src/providers/xbox               # Xbox Provider
 ├── src/rpc                          # WebSocket JSON-RPC 服务
 ├── src/scripting                    # QuickJS 沙箱、HID 桥接与 JS 插件加载
