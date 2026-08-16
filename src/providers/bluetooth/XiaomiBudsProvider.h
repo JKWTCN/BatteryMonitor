@@ -69,7 +69,7 @@ private:
 
     // 广播 RSSI 阈值（dBm）。readDevices() 每轮从 AppSettings 刷新，
     // watcher 回调线程高频读取（不能每个广播都查 QSettings，故缓存为原子量）。
-    std::atomic<int> m_rssiThreshold{-75};
+    std::atomic<int> m_rssiThreshold{-70};
 
     // SharedBleWatcher 订阅 id；0 表示未订阅。
     std::uint64_t m_subscriptionId = 0;

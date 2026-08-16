@@ -15,9 +15,9 @@
 //   - Theme           : QString "system" / "light" / "dark"，默认 "system"。
 //   - StaleRetentionSec : int 秒，默认 180（3 分钟）。设备单轮读不到时，
 //                         沿用上次读数继续展示的保留窗口；0 = 从不缓存。
-//   - HideUnpairedAirPods : bool，默认 true。隐藏 BLE 广播中未与本机配对的
+//   - HideUnpairedAirPods : bool，默认 false。隐藏 BLE 广播中未与本机配对的
 //                           AirPods / Beats。
-//   - AirPodsRssiThreshold / XiaomiBudsRssiThreshold : int dBm，默认 -75。
+//   - AirPodsRssiThreshold / XiaomiBudsRssiThreshold : int dBm，默认 -70。
 //                           耳机 BLE 广播的信号强度下限，低于即丢弃；两家分开设置。
 //   - HistoryRetentionDays : int，默认 30；0 表示永久保留历史。
 //
@@ -61,7 +61,7 @@ public:
     static int xiaomiBudsRssiThreshold();
     static void setXiaomiBudsRssiThreshold(int dBm);
 
-    static constexpr int kDefaultRssiThreshold = -75;
+    static constexpr int kDefaultRssiThreshold = -70;
     static constexpr int kMinRssiThreshold = -100;
     static constexpr int kMaxRssiThreshold = -40;
 

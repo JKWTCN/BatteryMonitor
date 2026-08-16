@@ -24,7 +24,7 @@ constexpr int kDefaultRefreshInterval = 10000;
 const QString kDefaultLanguage = QString();      // 空 = 跟随系统
 const QString kDefaultTheme = QStringLiteral("system");
 constexpr int kDefaultStaleRetentionSec = 180;   // 3 分钟
-constexpr bool kDefaultHideUnpairedAirPods = true;
+constexpr bool kDefaultHideUnpairedAirPods = false;
 constexpr int kDefaultHistoryRetentionDays = 30;
 
 // —— JS 插件 ——
