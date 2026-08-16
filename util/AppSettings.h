@@ -17,6 +17,8 @@
 //                         沿用上次读数继续展示的保留窗口；0 = 从不缓存。
 //   - HideUnpairedAirPods : bool，默认 true。隐藏 BLE 广播中未与本机配对的
 //                           AirPods / Beats。
+//   - AirPodsRssiThreshold / XiaomiBudsRssiThreshold : int dBm，默认 -75。
+//                           耳机 BLE 广播的信号强度下限，低于即丢弃；两家分开设置。
 //   - HistoryRetentionDays : int，默认 30；0 表示永久保留历史。
 //
 // 开机自启单独说明：它直接读写 Windows 注册表的 HKCU\...\Run，
@@ -49,6 +51,19 @@ public:
     // true = 只显示与本机已配对的 Apple 音频设备；false = 显示附近所有可解析广播。
     static bool hideUnpairedAirPods();
     static void setHideUnpairedAirPods(bool hide);
+
+    // —— 耳机广播 RSSI 阈值（dBm，负值）——
+    // 低于该值的 BLE 广播视为信号太弱直接丢弃；AirPods 与小米耳机分开设置。
+    // 合法范围 [kMinRssiThreshold, kMaxRssiThreshold]，越界 / 非法值回退默认。
+    static int airPodsRssiThreshold();
+    static void setAirPodsRssiThreshold(int dBm);
+
+    static int xiaomiBudsRssiThreshold();
+    static void setXiaomiBudsRssiThreshold(int dBm);
+
+    static constexpr int kDefaultRssiThreshold = -75;
+    static constexpr int kMinRssiThreshold = -100;
+    static constexpr int kMaxRssiThreshold = -40;
 
     // —— 电量历史保留天数 ——
     // 0 = 永久保留；默认 30 天。

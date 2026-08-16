@@ -15,6 +15,8 @@ constexpr auto kKeyLanguage = "Language";
 constexpr auto kKeyTheme = "Theme";
 constexpr auto kKeyStaleRetentionSec = "StaleRetentionSec";
 constexpr auto kKeyHideUnpairedAirPods = "HideUnpairedAirPods";
+constexpr auto kKeyAirPodsRssiThreshold = "AirPodsRssiThreshold";
+constexpr auto kKeyXiaomiBudsRssiThreshold = "XiaomiBudsRssiThreshold";
 constexpr auto kKeyHistoryRetentionDays = "HistoryRetentionDays";
 constexpr auto kKeyWindowSize = "WindowSize";
 
@@ -100,6 +102,38 @@ bool AppSettings::hideUnpairedAirPods()
 void AppSettings::setHideUnpairedAirPods(bool hide)
 {
     QSettings().setValue(kKeyHideUnpairedAirPods, hide);
+}
+
+int AppSettings::airPodsRssiThreshold()
+{
+    const int dBm = QSettings().value(kKeyAirPodsRssiThreshold,
+                                      kDefaultRssiThreshold).toInt();
+    if (dBm < kMinRssiThreshold || dBm > kMaxRssiThreshold) {
+        return kDefaultRssiThreshold;
+    }
+    return dBm;
+}
+
+void AppSettings::setAirPodsRssiThreshold(int dBm)
+{
+    QSettings().setValue(kKeyAirPodsRssiThreshold,
+                         qBound(kMinRssiThreshold, dBm, kMaxRssiThreshold));
+}
+
+int AppSettings::xiaomiBudsRssiThreshold()
+{
+    const int dBm = QSettings().value(kKeyXiaomiBudsRssiThreshold,
+                                      kDefaultRssiThreshold).toInt();
+    if (dBm < kMinRssiThreshold || dBm > kMaxRssiThreshold) {
+        return kDefaultRssiThreshold;
+    }
+    return dBm;
+}
+
+void AppSettings::setXiaomiBudsRssiThreshold(int dBm)
+{
+    QSettings().setValue(kKeyXiaomiBudsRssiThreshold,
+                         qBound(kMinRssiThreshold, dBm, kMaxRssiThreshold));
 }
 
 int AppSettings::historyRetentionDays()

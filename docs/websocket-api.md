@@ -128,6 +128,7 @@ Server **默认关闭**，可通过以下任一方式启用：
 | `rightCharging`| boolean      | 右耳是否正在充电。                                                                                                                              |
 | `caseCharging` | boolean      | 充电盒是否正在充电。                                                                                                                            |
 | `paired`       | boolean      | 是否已与本机配对。普通设备恒为`true`；AirPods/Beats 广播未配对时为 `false`。                                                                    |
+| `rssi`         | number\|null | 最近一次广播的信号强度（dBm，负值）。仅广播类设备（`airpods` / `xiaomi_buds`）有值；`null` 表示未上报。逐轮波动，不参与变更去重。                |
 | `wired`        | boolean      | 是否接有线电源（如 Xbox 接 USB 时无电池）。                                                                                                         |
 | `connected`    | boolean      | 设备当前是否在线。                                                                                                                                  |
 | `stale`        | boolean      | 当前展示值是否来自**粘性缓存**（本轮未读到该设备，沿用上次读数）。UI 据此标灰。                                                               |
@@ -150,6 +151,7 @@ Server **默认关闭**，可通过以下任一方式启用：
   "casePercent": null,
   "charging": false,
   "paired": true,
+  "rssi": null,
   "wired": false,
   "connected": true,
   "stale": false,
@@ -177,6 +179,7 @@ Server **默认关闭**，可通过以下任一方式启用：
   "rightCharging": false,
   "caseCharging": false,
   "paired": true,
+  "rssi": -58,
   "wired": false,
   "connected": true,
   "stale": false,

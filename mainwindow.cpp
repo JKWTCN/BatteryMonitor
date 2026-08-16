@@ -354,6 +354,13 @@ QString percentText(int value)
                       : MainWindow::tr("Unknown");
 }
 
+// 广播耳机最近一次广播的信号强度；0 表示 provider 未上报。
+QString rssiText(int rssi)
+{
+    return rssi < 0 ? QStringLiteral("%1 dBm").arg(rssi)
+                    : MainWindow::tr("Unknown");
+}
+
 QString yesNoText(bool value)
 {
     return value ? MainWindow::tr("Yes") : MainWindow::tr("No");
@@ -687,10 +694,12 @@ void MainWindow::setupPages()
     m_rightBatteryValue = makeValueLabel();
     m_caseBatteryValue = makeValueLabel();
     m_chargingValue = makeValueLabel();
+    m_rssiValue = makeValueLabel();
     m_leftBatteryRowTitle = addInfoRow(airPodsLayout, tr("Left battery"), m_leftBatteryValue);
     m_rightBatteryRowTitle = addInfoRow(airPodsLayout, tr("Right battery"), m_rightBatteryValue);
     m_caseBatteryRowTitle = addInfoRow(airPodsLayout, tr("Case battery"), m_caseBatteryValue);
     m_chargingRowTitle = addInfoRow(airPodsLayout, tr("Charging"), m_chargingValue);
+    m_rssiRowTitle = addInfoRow(airPodsLayout, tr("Signal strength (RSSI)"), m_rssiValue);
     detailLayout->addWidget(m_airPodsGroup);
 
     // —— 设备设置（每台设备持久化的偏好）——
@@ -822,6 +831,8 @@ void MainWindow::setupPages()
     m_startupRowTitle = new QLabel(tr("Start with Windows"));
     m_staleRetentionRowTitle = new QLabel(tr("Stale retention"));
     m_hideUnpairedAirPodsRowTitle = new QLabel(tr("Hide unpaired earbuds"));
+    m_airPodsRssiRowTitle = new QLabel(tr("AirPods RSSI threshold"));
+    m_xiaomiBudsRssiRowTitle = new QLabel(tr("XiaomiBuds RSSI threshold"));
     m_historyRetentionRowTitle = new QLabel(tr("History retention"));
     m_versionRowTitle = new QLabel(tr("Version"));
     m_versionValue = makeValueLabel();
@@ -844,6 +855,19 @@ void MainWindow::setupPages()
     m_startupCheck->setObjectName(QStringLiteral("startupCheck"));
     m_hideUnpairedAirPodsCheck = new QCheckBox();
     m_hideUnpairedAirPodsCheck->setObjectName(QStringLiteral("hideUnpairedAirPodsCheck"));
+    // 耳机广播 RSSI 阈值（dBm）：低于该值的广播视为信号太弱直接丢弃。
+    m_airPodsRssiSpin = new QSpinBox();
+    m_airPodsRssiSpin->setObjectName(QStringLiteral("settingsCombo"));
+    m_airPodsRssiSpin->setRange(AppSettings::kMinRssiThreshold,
+                                AppSettings::kMaxRssiThreshold);
+    m_airPodsRssiSpin->setValue(AppSettings::kDefaultRssiThreshold);
+    m_airPodsRssiSpin->setSuffix(QStringLiteral(" dBm"));
+    m_xiaomiBudsRssiSpin = new QSpinBox();
+    m_xiaomiBudsRssiSpin->setObjectName(QStringLiteral("settingsCombo"));
+    m_xiaomiBudsRssiSpin->setRange(AppSettings::kMinRssiThreshold,
+                                   AppSettings::kMaxRssiThreshold);
+    m_xiaomiBudsRssiSpin->setValue(AppSettings::kDefaultRssiThreshold);
+    m_xiaomiBudsRssiSpin->setSuffix(QStringLiteral(" dBm"));
     m_historyRetentionCombo = new QComboBox();
     m_historyRetentionCombo->setObjectName(QStringLiteral("settingsCombo"));
     addInfoRow(settingsGroupLayout, m_intervalRowTitle, m_intervalCombo);
@@ -851,6 +875,8 @@ void MainWindow::setupPages()
     addInfoRow(settingsGroupLayout, m_themeRowTitle, m_themeCombo);
     addInfoRow(settingsGroupLayout, m_staleRetentionRowTitle, m_staleRetentionCombo);
     addInfoRow(settingsGroupLayout, m_hideUnpairedAirPodsRowTitle, m_hideUnpairedAirPodsCheck);
+    addInfoRow(settingsGroupLayout, m_airPodsRssiRowTitle, m_airPodsRssiSpin);
+    addInfoRow(settingsGroupLayout, m_xiaomiBudsRssiRowTitle, m_xiaomiBudsRssiSpin);
     addInfoRow(settingsGroupLayout, m_historyRetentionRowTitle, m_historyRetentionCombo);
     addInfoRow(settingsGroupLayout, m_startupRowTitle, m_startupCheck);
     settingsLayout->addWidget(settingsGroup);
@@ -1016,6 +1042,10 @@ void MainWindow::setupConnections()
             this, &MainWindow::onStaleRetentionChanged);
     connect(m_hideUnpairedAirPodsCheck, &QCheckBox::toggled,
             this, &MainWindow::onHideUnpairedAirPodsChanged);
+    connect(m_airPodsRssiSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, &MainWindow::onAirPodsRssiChanged);
+    connect(m_xiaomiBudsRssiSpin, qOverload<int>(&QSpinBox::valueChanged),
+            this, &MainWindow::onXiaomiBudsRssiChanged);
     connect(m_historyRetentionCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &MainWindow::onHistoryRetentionChanged);
     connect(m_startupCheck, &QCheckBox::toggled,
@@ -1092,6 +1122,10 @@ void MainWindow::onDevicesUpdated(const QList<BatteryDevice> &devices)
         rebuildTable(devices);
         refreshDetailPage();
         updateTray(devices);
+    } else {
+        // RSSI 不参与 sameDisplayContent（避免逐轮波动触发整表重建），
+        // 详情页正在展示广播耳机时单独补刷这一行。
+        updateDetailRssi();
     }
     notifyLowBattery(devices);
 }
@@ -1169,6 +1203,23 @@ void MainWindow::onStaleRetentionChanged(int index)
 void MainWindow::onHideUnpairedAirPodsChanged(bool checked)
 {
     AppSettings::setHideUnpairedAirPods(checked);
+    if (m_manager) {
+        m_manager->refreshNow();
+    }
+}
+
+void MainWindow::onAirPodsRssiChanged(int value)
+{
+    AppSettings::setAirPodsRssiThreshold(value);
+    // Provider 在下一轮 readDevices() 读到新阈值，立即触发一轮刷新使其生效。
+    if (m_manager) {
+        m_manager->refreshNow();
+    }
+}
+
+void MainWindow::onXiaomiBudsRssiChanged(int value)
+{
+    AppSettings::setXiaomiBudsRssiThreshold(value);
     if (m_manager) {
         m_manager->refreshNow();
     }
@@ -1499,6 +1550,8 @@ void MainWindow::loadSettingsIntoUi()
     const QSignalBlocker b7(m_rpcEnabledCheck);
     const QSignalBlocker b8(m_rpcPortSpin);
     const QSignalBlocker b9(m_historyRetentionCombo);
+    const QSignalBlocker b10(m_airPodsRssiSpin);
+    const QSignalBlocker b11(m_xiaomiBudsRssiSpin);
     // QLineEdit 没有同名的阻塞器，用 blockSignals 即可。
     const bool hostBlocked = m_rpcHostEdit->blockSignals(true);
     const bool tokenBlocked = m_rpcTokenEdit->blockSignals(true);
@@ -1520,6 +1573,8 @@ void MainWindow::loadSettingsIntoUi()
     m_staleRetentionCombo->setCurrentIndex(
         staleRetentionIndex(AppSettings::staleRetentionSec()));
     m_hideUnpairedAirPodsCheck->setChecked(AppSettings::hideUnpairedAirPods());
+    m_airPodsRssiSpin->setValue(AppSettings::airPodsRssiThreshold());
+    m_xiaomiBudsRssiSpin->setValue(AppSettings::xiaomiBudsRssiThreshold());
     m_historyRetentionCombo->setCurrentIndex(
         historyRetentionIndex(AppSettings::historyRetentionDays()));
 
@@ -1632,6 +1687,7 @@ void MainWindow::retranslateUi()
     if (m_rightBatteryRowTitle) m_rightBatteryRowTitle->setText(tr("Right battery"));
     if (m_caseBatteryRowTitle) m_caseBatteryRowTitle->setText(tr("Case battery"));
     if (m_chargingRowTitle) m_chargingRowTitle->setText(tr("Charging"));
+    if (m_rssiRowTitle) m_rssiRowTitle->setText(tr("Signal strength (RSSI)"));
     if (m_deviceSettingsSectionLabel) m_deviceSettingsSectionLabel->setText(tr("Device settings"));
     if (m_historySectionLabel) m_historySectionLabel->setText(tr("Battery history"));
     if (m_generalSectionLabel) m_generalSectionLabel->setText(tr("General"));
@@ -1643,6 +1699,8 @@ void MainWindow::retranslateUi()
     if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
     if (m_staleRetentionRowTitle) m_staleRetentionRowTitle->setText(tr("Stale retention"));
     if (m_hideUnpairedAirPodsRowTitle) m_hideUnpairedAirPodsRowTitle->setText(tr("Hide unpaired earbuds"));
+    if (m_airPodsRssiRowTitle) m_airPodsRssiRowTitle->setText(tr("AirPods RSSI threshold"));
+    if (m_xiaomiBudsRssiRowTitle) m_xiaomiBudsRssiRowTitle->setText(tr("XiaomiBuds RSSI threshold"));
     if (m_historyRetentionRowTitle) m_historyRetentionRowTitle->setText(tr("History retention"));
     if (m_historyTitleLabel) m_historyTitleLabel->setText(tr("Battery history"));
     if (m_exportHistoryButton) m_exportHistoryButton->setText(tr("Export CSV"));
@@ -1741,6 +1799,7 @@ void MainWindow::refreshDetailPage()
         m_rightBatteryValue->setText(percentText(device.rightPercent));
         m_caseBatteryValue->setText(percentText(device.casePercent));
         m_chargingValue->setText(chargingPartsText(device));
+        m_rssiValue->setText(rssiText(device.rssi));
     }
 
     // —— 回填设备级设置（屏蔽信号，避免回调写盘）——
@@ -1774,6 +1833,21 @@ void MainWindow::refreshDetailPage()
         m_deviceKeepCacheCheck->setChecked(DeviceSettings::keepCachedForever(id));
     }
     refreshHistoryChart();
+}
+
+void MainWindow::updateDetailRssi()
+{
+    if (!m_rssiValue || m_currentDetailId.isEmpty()) {
+        return;
+    }
+    for (const BatteryDevice &device : std::as_const(m_devices)) {
+        if (QString::fromStdWString(device.id) == m_currentDetailId) {
+            if (isThreeChannelAudio(device.subType)) {
+                m_rssiValue->setText(rssiText(device.rssi));
+            }
+            return;
+        }
+    }
 }
 
 qint64 MainWindow::historyRangeStartMsecs() const

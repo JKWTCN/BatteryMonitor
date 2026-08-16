@@ -76,6 +76,9 @@ private slots:
     void onStaleRetentionChanged(int index);
     // 设置页「隐藏未配对 AirPods」复选框被切换。
     void onHideUnpairedAirPodsChanged(bool checked);
+    // 设置页「AirPods / 小米耳机 RSSI 阈值」数值被修改。
+    void onAirPodsRssiChanged(int value);
+    void onXiaomiBudsRssiChanged(int value);
     // 设置页「WebSocket 服务」启用复选框被切换。
     void onRpcEnabledToggled(bool checked);
     // 设置页 RPC 端口 / host / token 被修改。
@@ -112,6 +115,8 @@ private:
     void showDeviceList();
     void showSettingsPage();
     void refreshDetailPage();
+    // 仅更新详情页「信号强度」一行（RSSI 每轮都变，不值得整页重建）。
+    void updateDetailRssi();
     void updateTray(const QList<BatteryDevice> &devices);
     void notifyLowBattery(const QList<BatteryDevice> &devices);
     QString deviceDisplayName(const BatteryDevice &device) const;
@@ -165,10 +170,12 @@ private:
     QLabel *m_rightBatteryRowTitle = nullptr;
     QLabel *m_caseBatteryRowTitle = nullptr;
     QLabel *m_chargingRowTitle = nullptr;
+    QLabel *m_rssiRowTitle = nullptr;
     QLabel *m_leftBatteryValue = nullptr;
     QLabel *m_rightBatteryValue = nullptr;
     QLabel *m_caseBatteryValue = nullptr;
     QLabel *m_chargingValue = nullptr;
+    QLabel *m_rssiValue = nullptr;
 
     // —— 设备信息页的“设备设置”分组控件 ——
     // 与上方“只读信息行”不同：这里的 value 列是可交互控件。
@@ -208,6 +215,8 @@ private:
     QLabel *m_startupRowTitle = nullptr;
     QLabel *m_staleRetentionRowTitle = nullptr;
     QLabel *m_hideUnpairedAirPodsRowTitle = nullptr;
+    QLabel *m_airPodsRssiRowTitle = nullptr;
+    QLabel *m_xiaomiBudsRssiRowTitle = nullptr;
     QLabel *m_historyRetentionRowTitle = nullptr;
     QLabel *m_versionRowTitle = nullptr;
     QLabel *m_versionValue = nullptr;
@@ -219,6 +228,8 @@ private:
     QComboBox *m_staleRetentionCombo = nullptr;
     QCheckBox *m_startupCheck = nullptr;
     QCheckBox *m_hideUnpairedAirPodsCheck = nullptr;
+    QSpinBox *m_airPodsRssiSpin = nullptr;
+    QSpinBox *m_xiaomiBudsRssiSpin = nullptr;
     QComboBox *m_historyRetentionCombo = nullptr;
 
     // —— 设置页 WebSocket RPC 行控件 ——

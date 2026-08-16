@@ -40,6 +40,9 @@ QJsonObject toJson(const BatteryDevice &device)
     o["rightCharging"] = device.rightCharging;
     o["caseCharging"] = device.caseCharging;
     o["paired"] = device.paired;
+    // 广播类设备的信号强度（dBm）；0 = 未上报，序列化为 null。
+    // 刻意不进 signature()：逐轮波动会破坏变化去重。
+    o["rssi"] = device.rssi < 0 ? QJsonValue(device.rssi) : QJsonValue::Null;
     o["wired"] = device.wired;
     o["connected"] = device.connected;
     o["stale"] = device.stale;

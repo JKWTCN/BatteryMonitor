@@ -1,4 +1,5 @@
 #include "AirPodsProvider.h"
+#include "util/AppSettings.h"
 #include "util/Logger.h"
 
 #include <winrt/Windows.Devices.Bluetooth.h>
@@ -20,9 +21,6 @@ using namespace winrt::Windows::Devices::Bluetooth::Advertisement;
 
 namespace
 {
-    // RSSI 阈值：低于此值（信号太弱）的广播丢弃。
-    constexpr short kRssiThreshold = -75;
-
     // Apple Continuity 厂商数据 CompanyId = 0x004C = 76。
     constexpr uint16_t kAppleCompanyId = 76;
 
@@ -245,7 +243,7 @@ void AirPodsProvider::ensureSubscribed()
         m_subscriptionId = SharedBleWatcher::instance().addCallback(
             [this](const SharedBleWatcher::Args &args) { onAdvertisementReceived(args); });
         LOG_W(L"[AirPods] subscribed to shared watcher (Apple CompanyId=0x004C, RSSI>=" +
-              std::to_wstring(kRssiThreshold) + L"dBm)");
+              std::to_wstring(m_rssiThreshold.load()) + L"dBm)");
         return;
     }
     // 已订阅但 watcher 未启动成功（如蓝牙射频当时未开）：每轮重试启动。
@@ -258,7 +256,7 @@ void AirPodsProvider::onAdvertisementReceived(
     try
     {
         const short rssi = args.RawSignalStrengthInDBm();
-        if (rssi < kRssiThreshold)
+        if (rssi < m_rssiThreshold.load())
         {
             return; // 信号太弱，丢弃。
         }
@@ -377,6 +375,8 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
     catch (...)
     {
     }
+    // 每轮刷新 RSSI 阈值，用户在设置页改动后无需重启即可生效。
+    m_rssiThreshold.store(AppSettings::airPodsRssiThreshold());
     ensureSubscribed();
 
     std::vector<BatteryDevice> devices;
@@ -420,6 +420,7 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
         device.rightCharging = adv.rightCharging;
         device.caseCharging = adv.caseCharging;
         device.paired = paired;
+        device.rssi = adv.rssi;
         // 百分比取三路有效值的最低，用于排序 / 低电量提醒 / 整体进度条。
         int minPct = -1;
         for (int v : {adv.leftPercent, adv.rightPercent, adv.casePercent})

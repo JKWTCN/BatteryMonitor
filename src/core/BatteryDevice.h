@@ -83,6 +83,10 @@ struct BatteryDevice
     // 普通设备默认 true；只有广播类 provider 会填实际匹配结果。
     bool paired = true;
 
+    // 最近一次收到广播的信号强度（dBm，负值）。仅广播类 provider 填写；
+    // 0 表示未上报。逐轮波动，刻意不参与 sameDisplayContent（见其说明）。
+    int rssi = 0;
+
     // Windows / 设备协议是否报告为有线供电。该标记可以和有效电量同时存在：
     // 部分兼容 XInput 的 2.4 GHz dongle 会伪装成 USB 有线手柄，同时上报电量。
     bool wired = false;
@@ -105,7 +109,8 @@ using BatteryDeviceList = std::vector<BatteryDevice>;
 
 // 两台设备的“用户可见内容”是否一致（按同一下标的两台设备比较）。
 // 供消费方判断列表是否需要重建：排除 lastSeenMsecs（每轮刷新都会变，
-// 但用户看不到），其余展示相关字段全部参与比较。
+// 但用户看不到）与 rssi（逐轮波动，由详情页单独增量刷新），
+// 其余展示相关字段全部参与比较。
 inline bool sameDisplayContent(const BatteryDevice &a, const BatteryDevice &b)
 {
     return a.id == b.id && a.name == b.name && a.type == b.type &&

@@ -128,6 +128,7 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
 | `rightCharging` | boolean | Whether the right bud is charging. |
 | `caseCharging` | boolean | Whether the charging case is charging. |
 | `paired` | boolean | Whether paired with this machine. Always `true` for normal devices; `false` for unpaired AirPods/Beats broadcasts. |
+| `rssi` | number\|null | Signal strength (dBm, negative) of the last received advertisement. Only broadcast devices (`airpods` / `xiaomi_buds`) report it; `null` otherwise. Fluctuates per round; excluded from change dedup. |
 | `wired` | boolean | Whether on wired power (e.g. Xbox on USB has no battery). |
 | `connected` | boolean | Whether the device is currently online. |
 | `stale` | boolean | Whether the current value is from the **sticky cache** (provider didn't return the device this round; last reading is carried over). UI grays this out. |
@@ -150,6 +151,7 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
   "casePercent": null,
   "charging": false,
   "paired": true,
+  "rssi": null,
   "wired": false,
   "connected": true,
   "stale": false,
@@ -177,6 +179,7 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
   "rightCharging": false,
   "caseCharging": false,
   "paired": true,
+  "rssi": -58,
   "wired": false,
   "connected": true,
   "stale": false,

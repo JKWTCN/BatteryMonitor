@@ -406,6 +406,18 @@
         <translation>隐藏未配对的耳机广播</translation>
     </message>
     <message>
+        <source>AirPods RSSI threshold</source>
+        <translation>AirPods 信号强度阈值</translation>
+    </message>
+    <message>
+        <source>XiaomiBuds RSSI threshold</source>
+        <translation>小米耳机信号强度阈值</translation>
+    </message>
+    <message>
+        <source>Signal strength (RSSI)</source>
+        <translation>信号强度（RSSI）</translation>
+    </message>
+    <message>
         <source>WebSocket service</source>
         <translation>WebSocket 服务</translation>
     </message>
