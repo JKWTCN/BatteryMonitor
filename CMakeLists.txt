@@ -71,6 +71,8 @@ set(APP_PROVIDER_FILES
     src/providers/bluetooth/ClassicBluetoothProvider.h
     src/providers/bluetooth/AirPodsProvider.cpp
     src/providers/bluetooth/AirPodsProvider.h
+    src/providers/bluetooth/XiaomiBudsProvider.cpp
+    src/providers/bluetooth/XiaomiBudsProvider.h
     src/providers/xbox/XboxProvider.cpp
     src/providers/xbox/XboxProvider.h
     src/providers/hid/AulaHidProvider.cpp

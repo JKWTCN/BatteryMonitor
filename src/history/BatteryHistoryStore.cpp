@@ -51,8 +51,12 @@ QString typeKey(BatteryDevice::Type type)
 
 QString subTypeKey(BatteryDevice::SubType type)
 {
-    return type == BatteryDevice::SubType::AirPods
-        ? QStringLiteral("airpods") : QStringLiteral("generic");
+    switch (type) {
+    case BatteryDevice::SubType::AirPods:    return QStringLiteral("airpods");
+    case BatteryDevice::SubType::XiaomiBuds: return QStringLiteral("xiaomi_buds");
+    case BatteryDevice::SubType::Generic:
+    default:                                 return QStringLiteral("generic");
+    }
 }
 
 QString levelKey(BatteryLevel level)

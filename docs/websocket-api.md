@@ -117,13 +117,16 @@ Server **默认关闭**，可通过以下任一方式启用：
 | `alias`        | string       | 用户自定义别名（来自`DeviceSettings`，空串表示未设置）。                                                                                          |
 | `displayName`  | string       | 实际展示名 =`alias` 非空 ? `alias` : `name`。                                                                                                 |
 | `type`         | string       | 设备类别：`"bluetooth"` \| `"xbox"` \| `"hid"`                                                                                                |
-| `subType`      | string       | 子类别：`"generic"` \| `"airpods"`                                                                                                              |
+| `subType`      | string       | 子类别：`"generic"` \| `"airpods"` \| `"xiaomi_buds"`                                                                                           |
 | `percentage`   | number\|null | 精确电量`0-100`；`null` 表示无精确值（如 Xbox 离散档位），此时应回退到 `level`。AirPods 取左/右/盒三者最低值。                                |
 | `level`        | string       | **始终填充**的离散档位，用于着色 / 排序 / 提醒：`"unknown"` \| `"empty"` \| `"low"` \| `"medium"` \| `"full"`                       |
-| `leftPercent`  | number\|null | AirPods 左耳电量；`null`=未知（单耳使用/盒盖打开）。仅 `subType=="airpods"` 有意义。                                                            |
-| `rightPercent` | number\|null | AirPods 右耳电量。                                                                                                                                  |
-| `casePercent`  | number\|null | AirPods 充电盒电量。                                                                                                                                |
-| `charging`     | boolean      | 是否正在充电（任一路充电即`true`，目前仅 AirPods 路径会置 `true`）。                                                                            |
+| `leftPercent`  | number\|null | 左耳电量；`null`=未知（单耳使用/盒盖打开）。仅 `subType=="airpods"` / `"xiaomi_buds"` 有意义。                                                  |
+| `rightPercent` | number\|null | 右耳电量。                                                                                                                                  |
+| `casePercent`  | number\|null | 充电盒电量。                                                                                                                                |
+| `charging`     | boolean      | 是否正在充电（任一路充电即`true`，三路电量路径会置 `true`）。                                                                            |
+| `leftCharging` | boolean      | 左耳是否正在充电。仅 `subType=="airpods"` / `"xiaomi_buds"` 有意义。                                                                            |
+| `rightCharging`| boolean      | 右耳是否正在充电。                                                                                                                              |
+| `caseCharging` | boolean      | 充电盒是否正在充电。                                                                                                                            |
 | `paired`       | boolean      | 是否已与本机配对。普通设备恒为`true`；AirPods/Beats 广播未配对时为 `false`。                                                                    |
 | `wired`        | boolean      | 是否接有线电源（如 Xbox 接 USB 时无电池）。                                                                                                         |
 | `connected`    | boolean      | 设备当前是否在线。                                                                                                                                  |
@@ -170,6 +173,9 @@ Server **默认关闭**，可通过以下任一方式启用：
   "rightPercent": 45,
   "casePercent": 80,
   "charging": false,
+  "leftCharging": false,
+  "rightCharging": false,
+  "caseCharging": false,
   "paired": true,
   "wired": false,
   "connected": true,
@@ -194,7 +200,7 @@ Server **默认关闭**，可通过以下任一方式启用：
 
 | `type`        | 含义                                                  | 典型设备                     |
 | --------------- | ----------------------------------------------------- | ---------------------------- |
-| `"bluetooth"` | 蓝牙（BLE GATT / 经典蓝牙 A2DP / AirPods Continuity） | 蓝牙耳机、手环、AirPods      |
+| `"bluetooth"` | 蓝牙（BLE GATT / 经典蓝牙 A2DP / AirPods Continuity / 小米耳机广播） | 蓝牙耳机、手环、AirPods、小米 Buds |
 | `"xbox"`      | Xbox 手柄（XInput / WinRT RawGameController）         | Xbox 无线手柄                |
 | `"hid"`       | HID 协议 2.4G 接收器 / USB                            | AULA、AJAZZ、VGN、Razer 键鼠 |
 
@@ -202,6 +208,7 @@ Server **默认关闭**，可通过以下任一方式启用：
 | ------------- | ------------------------------------------- |
 | `"generic"` | 普通设备（只用`percentage` + `level`）  |
 | `"airpods"` | Apple AirPods / Beats（带左/右/盒三路电量） |
+| `"xiaomi_buds"` | 小米 / Redmi Buds 系列耳机（带左/右/盒三路电量） |
 
 ---
 

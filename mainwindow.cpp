@@ -114,19 +114,18 @@ QString batteryText(const BatteryDevice &device)
     if (device.wired && !shouldUseBattery(device)) {
         return MainWindow::tr("Wired");
     }
-    // AirPods / Beats：显示左/右/盒三路电量，未知路显示为 "-"。
-    if (device.subType == BatteryDevice::SubType::AirPods) {
-        const auto fmt = [](int v) {
-            return (v >= 0) ? QString::number(v) + QLatin1Char('%')
-                            : QStringLiteral("-");
+    // AirPods / Beats / 小米耳机：显示左/右/盒三路电量，未知路显示为 "-"，
+    // 正在充电的那一路数值后追加 ⚡。
+    if (isThreeChannelAudio(device.subType)) {
+        const auto fmt = [](int v, bool charging) {
+            QString s = (v >= 0) ? QString::number(v) + QLatin1Char('%')
+                                 : QStringLiteral("-");
+            return charging ? s + QStringLiteral("⚡") : s;
         };
-        QString text = QStringLiteral("L:") + fmt(device.leftPercent) +
-                       QStringLiteral("  R:") + fmt(device.rightPercent);
-        if (device.casePercent >= 0) {
-            text += QStringLiteral("  Case:") + fmt(device.casePercent);
-        }
-        if (device.charging) {
-            text += QStringLiteral(" ⚡");
+        QString text = QStringLiteral("L:") + fmt(device.leftPercent, device.leftCharging) +
+                       QStringLiteral("  R:") + fmt(device.rightPercent, device.rightCharging);
+        if (device.casePercent >= 0 || device.caseCharging) {
+            text += QStringLiteral("  Case:") + fmt(device.casePercent, device.caseCharging);
         }
         return text;
     }
@@ -157,6 +156,23 @@ QString statusText(const BatteryDevice &device)
         return MainWindow::tr("Disconnected");
     }
     if (device.charging) {
+        // 三路电量设备标明正在充电的部位（字母与 Case 单词，无需额外翻译），
+        // 如 "Charging (L+Case)"；其它设备维持单一 "Charging"。
+        if (isThreeChannelAudio(device.subType)) {
+            QString parts;
+            if (device.leftCharging) {
+                parts += QStringLiteral("L");
+            }
+            if (device.rightCharging) {
+                parts += parts.isEmpty() ? QStringLiteral("R") : QStringLiteral("+R");
+            }
+            if (device.caseCharging) {
+                parts += parts.isEmpty() ? QStringLiteral("Case") : QStringLiteral("+Case");
+            }
+            if (!parts.isEmpty()) {
+                return MainWindow::tr("Charging (%1)").arg(parts);
+            }
+        }
         return MainWindow::tr("Charging");
     }
     return MainWindow::tr("Connected");
@@ -341,6 +357,29 @@ QString percentText(int value)
 QString yesNoText(bool value)
 {
     return value ? MainWindow::tr("Yes") : MainWindow::tr("No");
+}
+
+// 三路电量设备的充电详情文本：列出正在充电的部位（如 "左耳, 充电盒"）；
+// 没有任何一路在充时回退到统一的 "No"。
+QString chargingPartsText(const BatteryDevice &device)
+{
+    if (!isThreeChannelAudio(device.subType)) {
+        return yesNoText(device.charging);
+    }
+    QString text;
+    const auto append = [&text](const QString &part) {
+        text += text.isEmpty() ? part : QStringLiteral(", ") + part;
+    };
+    if (device.leftCharging) {
+        append(MainWindow::tr("Left"));
+    }
+    if (device.rightCharging) {
+        append(MainWindow::tr("Right"));
+    }
+    if (device.caseCharging) {
+        append(MainWindow::tr("Case"));
+    }
+    return text.isEmpty() ? yesNoText(false) : text;
 }
 
 // 该设备当前是否已达到用户为它配置的低电量阈值。
@@ -782,7 +821,7 @@ void MainWindow::setupPages()
     m_themeRowTitle = new QLabel(tr("Theme"));
     m_startupRowTitle = new QLabel(tr("Start with Windows"));
     m_staleRetentionRowTitle = new QLabel(tr("Stale retention"));
-    m_hideUnpairedAirPodsRowTitle = new QLabel(tr("Hide unpaired AirPods"));
+    m_hideUnpairedAirPodsRowTitle = new QLabel(tr("Hide unpaired earbuds"));
     m_historyRetentionRowTitle = new QLabel(tr("History retention"));
     m_versionRowTitle = new QLabel(tr("Version"));
     m_versionValue = makeValueLabel();
@@ -1586,7 +1625,7 @@ void MainWindow::retranslateUi()
     if (m_themeRowTitle) m_themeRowTitle->setText(tr("Theme"));
     if (m_startupRowTitle) m_startupRowTitle->setText(tr("Start with Windows"));
     if (m_staleRetentionRowTitle) m_staleRetentionRowTitle->setText(tr("Stale retention"));
-    if (m_hideUnpairedAirPodsRowTitle) m_hideUnpairedAirPodsRowTitle->setText(tr("Hide unpaired AirPods"));
+    if (m_hideUnpairedAirPodsRowTitle) m_hideUnpairedAirPodsRowTitle->setText(tr("Hide unpaired earbuds"));
     if (m_historyRetentionRowTitle) m_historyRetentionRowTitle->setText(tr("History retention"));
     if (m_historyTitleLabel) m_historyTitleLabel->setText(tr("Battery history"));
     if (m_exportHistoryButton) m_exportHistoryButton->setText(tr("Export CSV"));
@@ -1667,7 +1706,8 @@ void MainWindow::refreshDetailPage()
     const BatteryDevice &device = *current;
     const QString name = QString::fromStdWString(device.name);
     const QString id = QString::fromStdWString(device.id);
-    const bool isAirPods = device.subType == BatteryDevice::SubType::AirPods;
+    // 三路电量音频设备（AirPods / 小米耳机）展示左/右/盒分组。
+    const bool isAirPods = isThreeChannelAudio(device.subType);
 
     m_detailNameLabel->setText(deviceDisplayName(device));
     m_detailBatteryLabel->setText(batteryText(device));
@@ -1683,7 +1723,7 @@ void MainWindow::refreshDetailPage()
         m_leftBatteryValue->setText(percentText(device.leftPercent));
         m_rightBatteryValue->setText(percentText(device.rightPercent));
         m_caseBatteryValue->setText(percentText(device.casePercent));
-        m_chargingValue->setText(yesNoText(device.charging));
+        m_chargingValue->setText(chargingPartsText(device));
     }
 
     // —— 回填设备级设置（屏蔽信号，避免回调写盘）——
@@ -1753,7 +1793,7 @@ void MainWindow::refreshHistoryChart()
     m_historyChart->setSamples(rows);
     const bool airPods = std::any_of(rows.cbegin(), rows.cend(),
         [](const BatteryHistorySample &s) {
-            return s.subType == BatteryDevice::SubType::AirPods;
+            return isThreeChannelAudio(s.subType);
         });
     m_historyLegendLabel->setText(airPods
         ? tr("Blue: left  •  Green: right  •  Orange: case  •  Gray dashed: offline / no data")

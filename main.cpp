@@ -9,6 +9,7 @@
 #include "src/providers/bluetooth/AirPodsProvider.h"
 #include "src/providers/bluetooth/BluetoothProvider.h"
 #include "src/providers/bluetooth/ClassicBluetoothProvider.h"
+#include "src/providers/bluetooth/XiaomiBudsProvider.h"
 #include "src/providers/hid/AulaHidProvider.h"
 #include "src/providers/hid/VgnHidProvider.h"
 #include "src/providers/xbox/XboxProvider.h"
@@ -251,6 +252,8 @@ int main(int argc, char *argv[])
     //   ClassicBluetoothProvider  —— 经典蓝牙 A2DP/HFP 耳机（SetupAPI BTHENUM），
     //                                普通蓝牙耳机走这里。
     //   AirPodsProvider           —— AirPods/Beats（Apple Continuity 广播）。
+    //   XiaomiBudsProvider        —— 小米/Redmi Buds 系列耳机（小米私有
+    //                                BLE 广播，左/右/盒三路电量）。
     //   XboxProvider              —— XInput / RawGameController 手柄。
     //   AulaHidProvider           —— AULA 等 2.4G 接收器（HID Output/Input Report）。
     //   AsusRogHidProvider        —— ROG Strix Scope RX TKL 无线键盘接收器。
@@ -265,6 +268,7 @@ int main(int argc, char *argv[])
     manager.addProvider(std::make_unique<BluetoothProvider>());
     manager.addProvider(std::make_unique<ClassicBluetoothProvider>());
     manager.addProvider(std::make_unique<AirPodsProvider>());
+    manager.addProvider(std::make_unique<XiaomiBudsProvider>());
     manager.addProvider(std::make_unique<XboxProvider>());
     manager.addProvider(std::make_unique<AulaHidProvider>());
     manager.addProvider(std::make_unique<AsusRogHidProvider>());

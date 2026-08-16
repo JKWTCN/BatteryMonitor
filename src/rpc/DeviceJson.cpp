@@ -36,6 +36,9 @@ QJsonObject toJson(const BatteryDevice &device)
     o["rightPercent"] = percentValue(device.rightPercent);
     o["casePercent"] = percentValue(device.casePercent);
     o["charging"] = device.charging;
+    o["leftCharging"] = device.leftCharging;
+    o["rightCharging"] = device.rightCharging;
+    o["caseCharging"] = device.caseCharging;
     o["paired"] = device.paired;
     o["wired"] = device.wired;
     o["connected"] = device.connected;
@@ -61,7 +64,7 @@ QString signature(const BatteryDevice &device)
 {
     // 仅纳入"客户端可见且会影响展示/判断"的字段。
     // 刻意排除 lastSeenMsecs（每轮都变，会破坏去重）。
-    return QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14")
+    return QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14|%15|%16|%17")
         .arg(QString::fromStdWString(device.id))
         .arg(QString::fromStdWString(device.name))
         .arg(static_cast<int>(device.type))
@@ -75,7 +78,10 @@ QString signature(const BatteryDevice &device)
         .arg(device.paired ? 1 : 0)
         .arg(device.wired ? 1 : 0)
         .arg(device.connected ? 1 : 0)
-        .arg(device.stale ? 1 : 0);
+        .arg(device.stale ? 1 : 0)
+        .arg(device.leftCharging ? 1 : 0)
+        .arg(device.rightCharging ? 1 : 0)
+        .arg(device.caseCharging ? 1 : 0);
 }
 
 QString levelToString(BatteryLevel level)
@@ -103,9 +109,10 @@ QString typeToString(BatteryDevice::Type type)
 QString subTypeToString(BatteryDevice::SubType subType)
 {
     switch (subType) {
-    case BatteryDevice::SubType::AirPods: return QStringLiteral("airpods");
+    case BatteryDevice::SubType::AirPods:   return QStringLiteral("airpods");
+    case BatteryDevice::SubType::XiaomiBuds: return QStringLiteral("xiaomi_buds");
     case BatteryDevice::SubType::Generic:
-    default:                              return QStringLiteral("generic");
+    default:                                return QStringLiteral("generic");
     }
 }
 } // namespace DeviceJson

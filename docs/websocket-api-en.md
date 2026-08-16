@@ -117,13 +117,16 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
 | `alias` | string | User-defined alias (from `DeviceSettings`; empty string = not set). |
 | `displayName` | string | Effective display name = `alias` non-empty ? `alias` : `name`. |
 | `type` | string | Device category: `"bluetooth"` \| `"xbox"` \| `"hid"` |
-| `subType` | string | Sub-category: `"generic"` \| `"airpods"` |
+| `subType` | string | Sub-category: `"generic"` \| `"airpods"` \| `"xiaomi_buds"` |
 | `percentage` | number\|null | Precise battery level `0-100`; `null` means no precise value (e.g. Xbox discrete levels) — fall back to `level`. AirPods: lowest of left/right/case. |
 | `level` | string | **Always populated** discrete level, for coloring / sorting / alerts: `"unknown"` \| `"empty"` \| `"low"` \| `"medium"` \| `"full"` |
-| `leftPercent` | number\|null | AirPods left bud battery; `null` = unknown (single-ear use / case open). Only meaningful when `subType=="airpods"`. |
-| `rightPercent` | number\|null | AirPods right bud battery. |
-| `casePercent` | number\|null | AirPods charging case battery. |
-| `charging` | boolean | Whether charging (any bud charging → `true`; currently only set by the AirPods path). |
+| `leftPercent` | number\|null | Left bud battery; `null` = unknown (single-ear use / case open). Only meaningful when `subType` is `"airpods"` / `"xiaomi_buds"`. |
+| `rightPercent` | number\|null | Right bud battery. |
+| `casePercent` | number\|null | Charging case battery. |
+| `charging` | boolean | Whether charging (any bud charging → `true`; set by triple-battery paths). |
+| `leftCharging` | boolean | Whether the left bud is charging. Only meaningful for triple-battery subtypes. |
+| `rightCharging` | boolean | Whether the right bud is charging. |
+| `caseCharging` | boolean | Whether the charging case is charging. |
 | `paired` | boolean | Whether paired with this machine. Always `true` for normal devices; `false` for unpaired AirPods/Beats broadcasts. |
 | `wired` | boolean | Whether on wired power (e.g. Xbox on USB has no battery). |
 | `connected` | boolean | Whether the device is currently online. |
@@ -170,6 +173,9 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
   "rightPercent": 45,
   "casePercent": 80,
   "charging": false,
+  "leftCharging": false,
+  "rightCharging": false,
+  "caseCharging": false,
   "paired": true,
   "wired": false,
   "connected": true,
@@ -194,7 +200,7 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
 
 | `type` | Meaning | Typical devices |
 | --- | --- | --- |
-| `"bluetooth"` | Bluetooth (BLE GATT / Classic BT A2DP / AirPods Continuity) | BT headphones, wristbands, AirPods |
+| `"bluetooth"` | Bluetooth (BLE GATT / Classic BT A2DP / AirPods Continuity / Xiaomi buds beacon) | BT headphones, wristbands, AirPods, Xiaomi Buds |
 | `"xbox"` | Xbox gamepad (XInput / WinRT RawGameController) | Xbox wireless controllers |
 | `"hid"` | HID protocol 2.4G dongle / USB | AULA, AJAZZ, VGN, Razer keyboards/mice |
 
@@ -202,6 +208,7 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
 | --- | --- |
 | `"generic"` | Normal device (uses only `percentage` + `level`) |
 | `"airpods"` | Apple AirPods / Beats (has left/right/case triple battery) |
+| `"xiaomi_buds"` | Xiaomi / Redmi Buds series earbuds (has left/right/case triple battery) |
 
 ---
 

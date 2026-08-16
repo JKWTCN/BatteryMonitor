@@ -229,6 +229,22 @@
         <translation>正在充电</translation>
     </message>
     <message>
+        <source>Charging (%1)</source>
+        <translation>正在充电（%1）</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation>左耳</translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation>右耳</translation>
+    </message>
+    <message>
+        <source>Case</source>
+        <translation>充电盒</translation>
+    </message>
+    <message>
         <location filename="../mainwindow.cpp" line="1124"/>
         <source>Unknown device</source>
         <translation>未知设备</translation>
@@ -386,8 +402,8 @@
         <translation>永久缓存</translation>
     </message>
     <message>
-        <source>Hide unpaired AirPods</source>
-        <translation>隐藏未配对的 AirPods</translation>
+        <source>Hide unpaired earbuds</source>
+        <translation>隐藏未配对的耳机广播</translation>
     </message>
     <message>
         <source>WebSocket service</source>

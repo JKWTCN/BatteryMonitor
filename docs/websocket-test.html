@@ -616,16 +616,18 @@ function statusBadges(dev) {
   if (dev.wired) html += `<span class="badge badge-wired">${t('wired')}</span>`;
   if (dev.stale) html += `<span class="badge badge-stale">${t('cached')}</span>`;
   if (dev.subType === 'airpods') html += '<span class="badge badge-stale">AirPods</span>';
+  if (dev.subType === 'xiaomi_buds') html += '<span class="badge badge-stale">Xiaomi Buds</span>';
   return html || `<span style="color:var(--secondary)">${t('online')}</span>`;
 }
 
 function airpodsDetail(dev) {
-  if (dev.subType !== 'airpods') return '';
+  if (dev.subType !== 'airpods' && dev.subType !== 'xiaomi_buds') return '';
   const fmt = v => (v === null || v === undefined) ? '—' : v + '%';
+  const fmtCh = (v, ch) => fmt(v) + (ch ? '⚡' : '');
   return `<div class="airpods-triple">
-    <span>${t('airLeft')} ${fmt(dev.leftPercent)}</span>
-    <span>${t('airRight')} ${fmt(dev.rightPercent)}</span>
-    <span>${t('airCase')} ${fmt(dev.casePercent)}</span>
+    <span>${t('airLeft')} ${fmtCh(dev.leftPercent, dev.leftCharging)}</span>
+    <span>${t('airRight')} ${fmtCh(dev.rightPercent, dev.rightCharging)}</span>
+    <span>${t('airCase')} ${fmtCh(dev.casePercent, dev.caseCharging)}</span>
   </div>`;
 }
 
@@ -694,7 +696,7 @@ function renderDetail(dev) {
     ${row(t('detailType'), `${typeLabel(dev.type)} / ${dev.subType}`)}
     ${row(t('detailBattery'), `<span class="battery ${batteryClass(dev.level)}">${batteryText(dev)}</span>`)}
     ${row(t('detailLevel'), dev.level || '—')}
-    ${dev.subType === 'airpods' ? row(t('detailLrc'), `${fmt(dev.leftPercent)} / ${fmt(dev.rightPercent)} / ${fmt(dev.casePercent)}`) : ''}
+    ${(dev.subType === 'airpods' || dev.subType === 'xiaomi_buds') ? row(t('detailLrc'), `${fmt(dev.leftPercent)} / ${fmt(dev.rightPercent)} / ${fmt(dev.casePercent)}`) : ''}
     ${row(t('detailCharging'), dev.charging ? '✅' : '❌')}
     ${row(t('detailPaired'), dev.paired ? '✅' : '❌')}
     ${row(t('detailWired'), dev.wired ? '✅' : '❌')}

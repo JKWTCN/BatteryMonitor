@@ -35,10 +35,13 @@ struct BatteryDevice
     //   Generic —— 普通蓝牙耳机 / 手柄，只用 percentage + level。
     //   AirPods —— Apple AirPods / Beats，有独立的左/右/充电盒三路电量，
     //              写到 leftPercent / rightPercent / casePercent；percentage 取三路最低值。
+    //   XiaomiBuds —— 小米 / Redmi Buds 系列真无线耳机，同为左/右/盒三路电量
+    //              （解析小米私有 BLE 广播，见 XiaomiBudsProvider），展示方式与 AirPods 一致。
     enum class SubType
     {
         Generic,
-        AirPods
+        AirPods,
+        XiaomiBuds
     };
 
     // 设备唯一标识。
@@ -63,15 +66,21 @@ struct BatteryDevice
     // 离散电量档位，始终填充，用于显示 / 着色 / 排序 / 低电量提醒。
     BatteryLevel level = BatteryLevel::Unknown;
 
-    // —— AirPods 三路电量专用（仅 subType==AirPods 时有意义）——
+    // —— 三路电量专用（仅 isThreeChannelAudio(subType) 时有意义）——
     // 左耳 / 右耳 / 充电盒电量百分比；-1 表示该路未知（如单耳使用、盒盖打开）。
     int leftPercent = -1;
     int rightPercent = -1;
     int casePercent = -1;
-    // 任一路正在充电即置 true（仅 AirPods 路径填写）。
+    // 任一路正在充电即置 true（三路电量路径填写）。
     bool charging = false;
-    // AirPods / Beats 广播是否能对应到本机已配对蓝牙地址。
-    // 普通设备默认 true；只有 AirPods provider 会填 false。
+    // —— 三路充电粒度（仅 isThreeChannelAudio(subType) 时有意义）——
+    // 左耳 / 右耳 / 充电盒各自是否正在充电；charging 恒等于三者之或，
+    // 保留单一布尔是为排序 / 提醒 / RPC 兼容。
+    bool leftCharging = false;
+    bool rightCharging = false;
+    bool caseCharging = false;
+    // AirPods / 小米耳机广播是否能对应到本机已配对蓝牙地址。
+    // 普通设备默认 true；只有广播类 provider 会填实际匹配结果。
     bool paired = true;
 
     // Windows / 设备协议是否报告为有线供电。该标记可以和有效电量同时存在：
@@ -93,3 +102,11 @@ struct BatteryDevice
 
 // 设备列表（核心层用 std::vector；Qt 边界自行转换为 QList/QVector）。
 using BatteryDeviceList = std::vector<BatteryDevice>;
+
+// 是否“三路电量”音频设备（AirPods / 小米耳机）。
+// UI 列表 / 详情页 / 历史曲线 / 过滤逻辑据此决定是否按左/右/盒三列展示。
+inline bool isThreeChannelAudio(BatteryDevice::SubType subType)
+{
+    return subType == BatteryDevice::SubType::AirPods ||
+           subType == BatteryDevice::SubType::XiaomiBuds;
+}

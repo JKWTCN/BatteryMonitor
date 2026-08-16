@@ -167,7 +167,7 @@ void BatteryHistoryChart::paintEvent(QPaintEvent *event)
     painter.setPen(QPen(grid, 1, Qt::DotLine));
 
     const bool airPods = std::any_of(m_samples.cbegin(), m_samples.cend(),
-        [](const BatteryHistorySample &s) { return s.subType == BatteryDevice::SubType::AirPods; });
+        [](const BatteryHistorySample &s) { return isThreeChannelAudio(s.subType); });
     const bool hasPercentage = std::any_of(m_samples.cbegin(), m_samples.cend(),
         [](const BatteryHistorySample &s) { return s.percentage >= 0; });
     const bool discrete = !airPods && !hasPercentage;

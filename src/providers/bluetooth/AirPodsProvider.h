@@ -46,6 +46,9 @@ private:
         int rightPercent = -1;
         int casePercent = -1;
         bool charging = false;
+        bool leftCharging = false;
+        bool rightCharging = false;
+        bool caseCharging = false;
         bool paired = false;
         short rssi = 0;
         std::chrono::steady_clock::time_point lastSeen; // 最近一次收到广播的时间
@@ -59,10 +62,11 @@ private:
         const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher &sender,
         const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs &args);
 
-    // 解析 Apple 厂商数据 payload，成功返回 true 并填充各电量字段。
+    // 解析 Apple 厂商数据 payload，成功返回 true 并填充各电量 / 充电字段。
     static bool parseApplePayload(const uint8_t *data, std::size_t len,
                                   std::wstring &modelName, int &left, int &right,
-                                  int &casePct, bool &charging);
+                                  int &casePct, bool &charging, bool &leftCharging,
+                                  bool &rightCharging, bool &caseCharging);
 
     // 蓝牙地址 -> 解析结果。由 watcher 回调线程写、readDevices() 读，需加锁。
     std::map<uint64_t, AdvDevice> m_devices;

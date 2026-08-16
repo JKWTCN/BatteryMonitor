@@ -30,6 +30,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 | Logitech MX Master 4 + Bolt 接收器       | VID`0x046D` / PID `0xC548`，HID++ 2.0 `0x1004` | 已验证   |
 | Razer Mouse Dock Pro + Razer Basilisk V3 Pro 35K (Wireless) | VID`0x1532` / PID `0x00A4` (底座) + PID `0x00CD` (鼠标) | 已验证 |
 | MCHOSE A7 V2 Pro（有线）                | VID`0x3837` / PID `0x4018`，支持精确电量和充电状态 | 已验证 |
+| Redmi Buds 5 Pro                        | 小米 BLE 广播（CompanyId `0x038F` / Service UUID `0xFD2D`），左/右/盒三路电量 | 已验证 |
 
 ## 理论支持设备
 
@@ -44,6 +45,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 | Logitech HID++ 2.0 接收器设备        | Bolt / Unifying / Nano / Lightspeed；电池 Feature `0x1004` / `0x1000` / `0x1001` | 理论支持，未验证 |
 | MCHOSE A7 V2 系列鼠标                 | 有线 VID`0x3837` / PID `0x4018`、`0x4019`、`0x4021`、`0x4023`；1K/8K Dongle PID `0x100A` / `0x100B`；8K MagDock VID`0x5253` / PID `0x1020` | 部分验证 |
 | AirPods / Beats 系列                 | Apple Company ID`0x004C`，代码内置 Model ID 表 | 理论支持，未验证 |
+| 小米 / Redmi Buds 系列耳机           | 小米 BLE 广播（CompanyId `0x038F` / Service UUID `0xFD2D`），已验证 Redmi Buds 5 Pro，其它型号理论支持 | 部分验证 |
 | Xbox / XInput / Windows 游戏控制器   | Microsoft VID`0x045E` 或 Windows 控制器接口    | 理论支持，未验证 |
 | 标准 BLE 电量服务设备                | BLE GATT Battery Service，无固定 USB VID/PID     | 理论支持，未验证 |
 | 经典蓝牙音频设备                     | Windows BTHENUM 设备属性，无固定 USB VID/PID     | 理论支持，未验证 |
@@ -60,7 +62,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 - 支持低电量提醒和提醒策略
 - 支持设备别名
 - 支持设备掉线后的电量缓存显示
-- 支持隐藏未配对的 AirPods / Beats 广播
+- 支持隐藏未配对的 AirPods / Beats / 小米耳机广播
 - 支持开机自启并最小化到托盘
 - 支持浅色、深色、跟随系统主题
 - 支持中文界面
@@ -75,6 +77,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 - `BluetoothProvider`：读取 BLE GATT Battery Service / Windows 电池信息
 - `ClassicBluetoothProvider`：读取经典蓝牙设备的 Windows 设备属性电量
 - `AirPodsProvider`：解析 Apple Continuity BLE 广播，读取 AirPods / Beats 左耳、右耳、充电盒电量
+- `XiaomiBudsProvider`：解析小米 BLE 广播，读取小米 / Redmi Buds 系列耳机左耳、右耳、充电盒电量
 - `XboxProvider`：通过 XInput、RawGameController 和 Windows 设备属性读取 Xbox 手柄电量
 - `AulaHidProvider`：通过 hidapi 读取 AULA 2.4G 接收器设备电量
 - `AsusRogHidProvider`：通过 hidapi 读取 ROG Strix Scope RX TKL Wireless Deluxe 接收器设备电量和充电状态
@@ -126,7 +129,7 @@ bin/BatteryMonitor.exe
 - 是否永久缓存该设备
 
 设备详情页还提供最近 24 小时、7 天、30 天或全部历史的电量曲线。AirPods / Beats
-会分别显示左耳、右耳和充电盒电量；点击「导出 CSV」可导出当前设备和当前时间范围的完整记录。
+和小米耳机会分别显示左耳、右耳和充电盒电量；点击「导出 CSV」可导出当前设备和当前时间范围的完整记录。
 
 设置页中可以配置：
 
@@ -135,7 +138,7 @@ bin/BatteryMonitor.exe
 - 主题
 - 开机自启
 - 掉线缓存保留时长
-- 是否隐藏未配对 AirPods
+- 是否隐藏未配对耳机广播（AirPods / 小米耳机）
 - WebSocket 服务开关、监听端口、监听地址、鉴权令牌
 - 电量历史保留时长（默认 30 天，可选永久保留）
 
@@ -202,6 +205,7 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 - 标准蓝牙电量设备优先看 `BluetoothProvider`
 - 经典蓝牙音频设备优先看 `ClassicBluetoothProvider`
 - Apple 音频设备优先看 `AirPodsProvider`
+- 小米 / Redmi 耳机优先看 `XiaomiBudsProvider`
 - XInput / Windows 游戏控制器设备优先看 `XboxProvider`
 - 2.4G 接收器或 HID 私有协议设备优先编写 JS 插件；API 和示例见
   [JS 插件开发指南](docs/js-plugin.md)

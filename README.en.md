@@ -30,6 +30,7 @@ Only the following devices have been tested so far:
 | Logitech MX Master 4 + Bolt receiver     | VID`0x046D` / PID `0xC548`, HID++ 2.0 `0x1004`                        | Verified            |
 | Razer Mouse Dock Pro + Razer Basilisk V3 Pro 35K (Wireless) | VID`0x1532` / PID `0x00A4` (dock) + PID `0x00CD` (mouse) | Verified |
 | MCHOSE A7 V2 Pro (wired)                 | VID`0x3837` / PID `0x4018`; precise battery percentage and charging state | Verified |
+| Redmi Buds 5 Pro                         | Xiaomi BLE beacon (CompanyId `0x038F` / Service UUID `0xFD2D`); left/right/case battery | Verified |
 
 ## Theoretically Supported Devices
 
@@ -44,6 +45,7 @@ Besides the verified devices above, the code also contains adapter logic for som
 | Logitech HID++ 2.0 receiver devices                | Bolt / Unifying / Nano / Lightspeed; battery features `0x1004` / `0x1000` / `0x1001` | Theoretical, unverified |
 | MCHOSE A7 V2 series mice                           | Wired VID`0x3837` / PID `0x4018`, `0x4019`, `0x4021`, or `0x4023`; 1K/8K dongle PID `0x100A` / `0x100B`; 8K MagDock VID`0x5253` / PID `0x1020` | Partially verified |
 | AirPods / Beats series                             | Apple Company ID`0x004C`, built-in Model ID table                                   | Theoretical, unverified |
+| Xiaomi / Redmi Buds series earbuds                 | Xiaomi BLE beacon (CompanyId `0x038F` / Service UUID `0xFD2D`); Redmi Buds 5 Pro verified, other models theoretical | Partially verified |
 | Xbox / XInput / Windows game controllers           | Microsoft VID`0x045E` or Windows controller interfaces                              | Theoretical, unverified |
 | Standard BLE Battery Service devices               | BLE GATT Battery Service, no fixed USB VID/PID                                        | Theoretical, unverified |
 | Classic Bluetooth audio devices                    | Windows BTHENUM device property, no fixed USB VID/PID                                 | Theoretical, unverified |
@@ -60,7 +62,7 @@ Note: AULA / AJAZZ wired USB keyboard bodies are not included in the current HID
 - Low battery notifications and notification policies
 - Per-device alias
 - Stale battery cache for disconnected or temporarily unreadable devices
-- Option to hide unpaired AirPods / Beats advertisements
+- Option to hide unpaired AirPods / Beats / Xiaomi earbuds advertisements
 - Start with Windows and minimize to tray
 - Light, dark, and system theme modes
 - Chinese UI support
@@ -75,6 +77,7 @@ The project is split into several providers by device source:
 - `BluetoothProvider`: reads BLE GATT Battery Service / Windows battery information
 - `ClassicBluetoothProvider`: reads classic Bluetooth device battery from Windows device properties
 - `AirPodsProvider`: parses Apple Continuity BLE advertisements for AirPods / Beats left, right, and case battery levels
+- `XiaomiBudsProvider`: parses Xiaomi BLE advertisements for Xiaomi / Redmi Buds left, right, and case battery levels
 - `XboxProvider`: reads Xbox controller battery through XInput, RawGameController, and Windows device properties
 - `AulaHidProvider`: reads AULA 2.4G dongle device battery through hidapi
 - `AsusRogHidProvider`: reads battery level and charging state from the ROG Strix Scope RX TKL Wireless Deluxe dongle through hidapi
@@ -126,8 +129,8 @@ Click a device to open its detail page and configure:
 - Whether to keep the device cached forever
 
 The device details page also shows battery history for the last 24 hours, 7 days, 30 days,
-or all retained data. AirPods and Beats use separate left, right, and case series. The CSV
-button exports the current device and selected time range.
+or all retained data. AirPods / Beats and Xiaomi earbuds use separate left, right, and case
+series. The CSV button exports the current device and selected time range.
 
 The settings page allows configuring:
 
@@ -136,7 +139,7 @@ The settings page allows configuring:
 - Theme
 - Start with Windows
 - Stale cache retention time
-- Whether to hide unpaired AirPods
+- Whether to hide unpaired earbuds advertisements (AirPods / Xiaomi)
 - WebSocket service toggle, listen port, bind address, and authentication token
 - Battery history retention (30 days by default, with a permanent option)
 
@@ -205,6 +208,7 @@ To add support for a new device, you usually need to add or extend the correspon
 - Standard Bluetooth battery devices: start with `BluetoothProvider`
 - Classic Bluetooth audio devices: start with `ClassicBluetoothProvider`
 - Apple audio devices: start with `AirPodsProvider`
+- Xiaomi / Redmi earbuds: start with `XiaomiBudsProvider`
 - XInput / Windows game controllers: start with `XboxProvider`
 - For 2.4G dongles or private HID protocols, prefer a JavaScript plugin; see the
   [JavaScript Plugin Guide](docs/js-plugin-en.md)

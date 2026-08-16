@@ -303,8 +303,10 @@ void AirPodsProvider::onAdvertisementReceived(
             std::wstring name;
             int left = -1, right = -1, casePct = -1;
             bool charging = false;
+            bool leftCharging = false, rightCharging = false, caseCharging = false;
             if (!parseApplePayload(data.data(), data.size(),
-                                   name, left, right, casePct, charging))
+                                   name, left, right, casePct, charging,
+                                   leftCharging, rightCharging, caseCharging))
             {
                 continue;
             }
@@ -318,12 +320,17 @@ void AirPodsProvider::onAdvertisementReceived(
                 d.rightPercent = right;
                 d.casePercent = casePct;
                 d.charging = charging;
+                d.leftCharging = leftCharging;
+                d.rightCharging = rightCharging;
+                d.caseCharging = caseCharging;
                 d.rssi = rssi;
                 d.lastSeen = std::chrono::steady_clock::now();
             }
             LOG_VERBOSE_W(L"[AirPods] RX " + name + L" L=" + std::to_wstring(left) +
-                          L"% R=" + std::to_wstring(right) + L"% Case=" +
-                          std::to_wstring(casePct) + L"% rssi=" + std::to_wstring(rssi) +
+                          (leftCharging ? L"%⚡" : L"%") + L" R=" + std::to_wstring(right) +
+                          (rightCharging ? L"%⚡" : L"%") + L" Case=" +
+                          std::to_wstring(casePct) +
+                          (caseCharging ? L"%⚡" : L"%") + L" rssi=" + std::to_wstring(rssi) +
                           L"dBm");
             break; // 每个广播包只处理第一个 Apple 厂商数据。
         }
@@ -339,7 +346,9 @@ void AirPodsProvider::onAdvertisementReceived(
 
 bool AirPodsProvider::parseApplePayload(const uint8_t *data, std::size_t len,
                                         std::wstring &modelName, int &left,
-                                        int &right, int &casePct, bool &charging)
+                                        int &right, int &casePct, bool &charging,
+                                        bool &leftCharging, bool &rightCharging,
+                                        bool &caseCharging)
 {
     if (len < 25)
     {
@@ -369,9 +378,9 @@ bool AirPodsProvider::parseApplePayload(const uint8_t *data, std::size_t len,
 
     // 充电状态（statusNib 的位）：
     //   bit2(4) -> 充电盒充电；flip?bit1:bit0 -> 左耳充电；flip?bit0:bit1 -> 右耳充电。
-    const bool caseCharging = (statusNib & 4) != 0;
-    const bool leftCharging = (flip ? (statusNib & 2) : (statusNib & 1)) != 0;
-    const bool rightCharging = (flip ? (statusNib & 1) : (statusNib & 2)) != 0;
+    caseCharging = (statusNib & 4) != 0;
+    leftCharging = (flip ? (statusNib & 2) : (statusNib & 1)) != 0;
+    rightCharging = (flip ? (statusNib & 1) : (statusNib & 2)) != 0;
     charging = leftCharging || rightCharging || caseCharging;
 
     left = nibbleToPercent(a, modelId);
@@ -429,6 +438,9 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
         device.rightPercent = adv.rightPercent;
         device.casePercent = adv.casePercent;
         device.charging = adv.charging;
+        device.leftCharging = adv.leftCharging;
+        device.rightCharging = adv.rightCharging;
+        device.caseCharging = adv.caseCharging;
         device.paired = paired;
         // 百分比取三路有效值的最低，用于排序 / 低电量提醒 / 整体进度条。
         int minPct = -1;

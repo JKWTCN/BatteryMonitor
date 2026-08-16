@@ -36,6 +36,23 @@ bool looksLikeAppleAudioName(const std::wstring &name)
            lower.find(L"powerbeats") != std::wstring::npos;
 }
 
+// 小米 / Redmi 真无线耳机在 Windows 里的常见命名：
+// "Xiaomi Buds 4 Pro"、"Redmi Buds 5"、"Redmi Earbuds"、老款 "AirDots" 等。
+// 刻意要求出现 xiaomi / redmi 品牌词，避免误伤 "Galaxy Buds" 等其它品牌。
+bool looksLikeXiaomiAudioName(const std::wstring &name)
+{
+    const std::wstring lower = lowerCopy(name);
+    const bool brand = lower.find(L"xiaomi") != std::wstring::npos ||
+                       lower.find(L"redmi") != std::wstring::npos;
+    if (!brand) {
+        return false;
+    }
+    return lower.find(L"buds") != std::wstring::npos ||
+           lower.find(L"earbuds") != std::wstring::npos ||
+           lower.find(L"airdots") != std::wstring::npos ||
+           lower.find(L"earphone") != std::wstring::npos;
+}
+
 // 单 provider worker：每个 provider 独占一个线程，互不阻塞。
 // BatteryManager 在主线程中合并各 worker 的最新快照，并维护粘性缓存。
 class ProviderWorker : public QObject
@@ -104,6 +121,9 @@ std::wstring BatteryManager::deviceSignature(const BatteryDevice &d)
        << d.rightPercent << L'|'
        << d.casePercent << L'|'
        << (d.charging ? 1 : 0) << L'|'
+       << (d.leftCharging ? 1 : 0) << L'|'
+       << (d.rightCharging ? 1 : 0) << L'|'
+       << (d.caseCharging ? 1 : 0) << L'|'
        << (d.paired ? 1 : 0) << L'|'
        << (d.wired ? 1 : 0) << L'|'
        << (d.connected ? 1 : 0) << L'|'
@@ -139,10 +159,10 @@ void BatteryManager::logSummaryIfChanged(const std::vector<BatteryDevice> &devic
         }
         const auto &d = devices[i];
         ss << d.name;
-        if (d.subType == BatteryDevice::SubType::AirPods) {
-            ss << L"[L" << d.leftPercent
-               << L"/R" << d.rightPercent
-               << L"/C" << d.casePercent << L"]";
+        if (isThreeChannelAudio(d.subType)) {
+            ss << L"[L" << d.leftPercent << (d.leftCharging ? L"⚡" : L"")
+               << L"/R" << d.rightPercent << (d.rightCharging ? L"⚡" : L"")
+               << L"/C" << d.casePercent << (d.caseCharging ? L"⚡" : L"") << L"]";
         } else if (d.percentage >= 0) {
             ss << L"=" << d.percentage << L"%";
         } else {
@@ -188,7 +208,7 @@ void BatteryManager::applyStickyCache(std::vector<BatteryDevice> &raw,
             continue;
         }
         if (AppSettings::hideUnpairedAirPods()
-            && it.value().subType == BatteryDevice::SubType::AirPods
+            && isThreeChannelAudio(it.value().subType)
             && !it.value().paired) {
             it = m_cache.erase(it);
             continue;
@@ -215,9 +235,14 @@ void BatteryManager::applyStickyCache(std::vector<BatteryDevice> &raw,
 
 void BatteryManager::filterUnpairedAirPods(std::vector<BatteryDevice> &raw)
 {
+    // AirPods / 小米耳机共用同一套“未配对广播”过滤策略，分开计数以便
+    // “唯一广播 + 已连接占位”兜底只作用于对应的品牌。
     int unpairedAirPodsCount = 0;
     int airPodsBroadcastCount = 0;
+    int unpairedXiaomiCount = 0;
+    int xiaomiBroadcastCount = 0;
     bool hasConnectedAppleAudioPlaceholder = false;
+    bool hasConnectedXiaomiAudioPlaceholder = false;
     for (const auto &d : raw) {
         if (d.subType == BatteryDevice::SubType::AirPods) {
             ++airPodsBroadcastCount;
@@ -225,48 +250,66 @@ void BatteryManager::filterUnpairedAirPods(std::vector<BatteryDevice> &raw)
                 ++unpairedAirPodsCount;
             }
         }
+        if (d.subType == BatteryDevice::SubType::XiaomiBuds) {
+            ++xiaomiBroadcastCount;
+            if (!d.paired) {
+                ++unpairedXiaomiCount;
+            }
+        }
         if (d.subType == BatteryDevice::SubType::Generic &&
             d.type == BatteryDevice::Type::Bluetooth &&
-            d.connected &&
-            looksLikeAppleAudioName(d.name)) {
-            hasConnectedAppleAudioPlaceholder = true;
+            d.connected) {
+            if (looksLikeAppleAudioName(d.name)) {
+                hasConnectedAppleAudioPlaceholder = true;
+            }
+            if (looksLikeXiaomiAudioName(d.name)) {
+                hasConnectedXiaomiAudioPlaceholder = true;
+            }
         }
     }
 
-    // 如果广播地址和 Windows 配对地址对不上，但当前只有一个 AirPods 广播，
-    // 且系统里已有一个已连接的 AirPods/Beats 蓝牙记录，则把它视为本机设备。
-    const bool allowSingleByConnectedPlaceholder =
+    // 如果广播地址和 Windows 配对地址对不上，但当前只有一个该品牌广播，
+    // 且系统里已有一个已连接的同品牌蓝牙记录，则把它视为本机设备。
+    const bool allowSingleAppleByPlaceholder =
         AppSettings::hideUnpairedAirPods() &&
         airPodsBroadcastCount == 1 &&
         unpairedAirPodsCount == 1 &&
         hasConnectedAppleAudioPlaceholder;
+    const bool allowSingleXiaomiByPlaceholder =
+        AppSettings::hideUnpairedAirPods() &&
+        xiaomiBroadcastCount == 1 &&
+        unpairedXiaomiCount == 1 &&
+        hasConnectedXiaomiAudioPlaceholder;
 
     raw.erase(std::remove_if(raw.begin(), raw.end(),
-        [allowSingleByConnectedPlaceholder](BatteryDevice &d) {
-            if (d.subType != BatteryDevice::SubType::AirPods) {
+        [allowSingleAppleByPlaceholder, allowSingleXiaomiByPlaceholder](BatteryDevice &d) {
+            if (!isThreeChannelAudio(d.subType)) {
                 return false;
             }
             // BLE 广播没提供任何一路有效电量时，不展示未知电量行。
             // 如果缓存里有上一轮有效值，applyStickyCache() 会在后面补回。
             if (d.percentage < 0) {
-                LOG_VERBOSE_W(L"[BatteryManager] hide AirPods broadcast without battery: " + d.name);
+                LOG_VERBOSE_W(L"[BatteryManager] hide earbuds broadcast without battery: " + d.name);
                 return true;
             }
             if (d.paired || !AppSettings::hideUnpairedAirPods()) {
                 return false;
             }
-            if (allowSingleByConnectedPlaceholder) {
+            const bool allowSingle = d.subType == BatteryDevice::SubType::AirPods
+                ? allowSingleAppleByPlaceholder
+                : allowSingleXiaomiByPlaceholder;
+            if (allowSingle) {
                 d.paired = true;
                 return false;
             }
-            LOG_VERBOSE_W(L"[BatteryManager] hide unpaired AirPods broadcast: " + d.name);
+            LOG_VERBOSE_W(L"[BatteryManager] hide unpaired earbuds broadcast: " + d.name);
             return true;
         }), raw.end());
 
     // 隐藏普通 BluetoothProvider/ClassicBluetoothProvider 产生的
-    // “已连接但电量未知”AirPods 占位项。它只用于上面的匹配兜底，不进入 UI。
-    // 如果曾经收到过有效 AirPods 广播，applyStickyCache() 会补回最后一次有效电量；
-    // 如果从未收到过，就不显示 AirPods 电量行。
+    // “已连接但电量未知”AirPods / 小米耳机占位项。它只用于上面的匹配兜底，
+    // 不进入 UI。如果曾经收到过有效广播，applyStickyCache() 会补回最后
+    // 一次有效电量；如果从未收到过，就不显示该设备的电量行。
     raw.erase(std::remove_if(raw.begin(), raw.end(),
         [](const BatteryDevice &d) {
             return d.subType == BatteryDevice::SubType::Generic &&
@@ -274,7 +317,7 @@ void BatteryManager::filterUnpairedAirPods(std::vector<BatteryDevice> &raw)
                    d.connected &&
                    d.percentage < 0 &&
                    d.level == BatteryLevel::Unknown &&
-                   looksLikeAppleAudioName(d.name);
+                   (looksLikeAppleAudioName(d.name) || looksLikeXiaomiAudioName(d.name));
         }), raw.end());
 }
 
