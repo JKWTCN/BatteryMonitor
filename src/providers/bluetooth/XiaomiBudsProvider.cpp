@@ -182,16 +182,10 @@ XiaomiBudsProvider::XiaomiBudsProvider() = default;
 
 XiaomiBudsProvider::~XiaomiBudsProvider()
 {
-    if (m_watcherStarted && m_watcher)
+    if (m_subscriptionId)
     {
-        try
-        {
-            m_watcher.Received(m_receivedToken);
-            m_watcher.Stop();
-        }
-        catch (...)
-        {
-        }
+        SharedBleWatcher::instance().removeCallback(m_subscriptionId);
+        m_subscriptionId = 0;
     }
 }
 
@@ -200,38 +194,23 @@ std::wstring XiaomiBudsProvider::displayName() const
     return L"XiaomiBuds";
 }
 
-void XiaomiBudsProvider::ensureWatcherStarted()
+void XiaomiBudsProvider::ensureSubscribed()
 {
-    if (m_watcherStarted)
+    if (!m_subscriptionId)
     {
+        m_subscriptionId = SharedBleWatcher::instance().addCallback(
+            [this](const SharedBleWatcher::Args &args) { onAdvertisementReceived(args); });
+        LOG_W(L"[XiaomiBuds] subscribed to shared watcher "
+              L"(CompanyId=0x038F / UUID=0xFD2D, RSSI>=" +
+              std::to_wstring(kRssiThreshold) + L"dBm)");
         return;
     }
-    try
-    {
-        m_watcher = BluetoothLEAdvertisementWatcher();
-        m_watcher.ScanningMode(BluetoothLEScanningMode::Active);
-        // 与 AirPodsProvider 相同：不构造 WinRT 过滤器（部分 SDK 版本上构造
-        // 空数据会失败），在回调里按 CompanyId / ServiceData UUID 过滤。
-        m_receivedToken = m_watcher.Received(
-            {this, &XiaomiBudsProvider::onAdvertisementReceived});
-        m_watcher.Start();
-        m_watcherStarted = true;
-        LOG_W(L"[XiaomiBuds] watcher started (CompanyId=0x038F / UUID=0xFD2D, RSSI>=" +
-              std::to_wstring(kRssiThreshold) + L"dBm)");
-    }
-    catch (const winrt::hresult_error &e)
-    {
-        LOG_ERR_W(L"[XiaomiBuds] watcher start FAILED: " + std::wstring(e.message()));
-    }
-    catch (...)
-    {
-        LOG_ERR("[XiaomiBuds] watcher start FAILED (unknown)");
-    }
+    // 已订阅但 watcher 未启动成功（如蓝牙射频当时未开）：每轮重试启动。
+    SharedBleWatcher::instance().ensureStarted();
 }
 
 void XiaomiBudsProvider::onAdvertisementReceived(
-    const BluetoothLEAdvertisementWatcher & /*sender*/,
-    const BluetoothLEAdvertisementReceivedEventArgs &args)
+    const SharedBleWatcher::Args &args)
 {
     try
     {
@@ -391,7 +370,7 @@ std::vector<BatteryDevice> XiaomiBudsProvider::readDevices()
     catch (...)
     {
     }
-    ensureWatcherStarted();
+    ensureSubscribed();
 
     std::vector<BatteryDevice> devices;
     const auto now = std::chrono::steady_clock::now();

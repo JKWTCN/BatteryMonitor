@@ -1,8 +1,8 @@
 #pragma once
 
 #include "src/core/IBatteryProvider.h"
+#include "src/providers/bluetooth/SharedBleWatcher.h"
 
-#include <winrt/Windows.Devices.Bluetooth.Advertisement.h>
 #include <winrt/base.h>
 
 #include <chrono>
@@ -23,9 +23,9 @@
 //
 //   两类帧的电量字节编码一致：0xFF=未知；低 7 位=百分比；bit7=充电中。
 //
-// 适配现有轮询架构（与 AirPodsProvider 相同）：watcher 在 readDevices()
-// 首次调用时启动并保持运行；readDevices() 返回“最近 N 秒内收到过广播”的
-// 设备快照。
+// 适配现有轮询架构（与 AirPodsProvider 相同）：共享 watcher 订阅在
+// readDevices() 首次调用时注册并保持；readDevices() 返回“最近 N 秒内收到过
+// 广播”的设备快照。
 class XiaomiBudsProvider : public IBatteryProvider
 {
 public:
@@ -56,19 +56,16 @@ private:
         std::chrono::steady_clock::time_point lastSeen; // 最近一次收到广播的时间
     };
 
-    // 启动 watcher（幂等）。
-    void ensureWatcherStarted();
+    // 注册共享 watcher 订阅（幂等）。
+    void ensureSubscribed();
 
-    // 广播接收回调（在 WinRT 线程触发）。
-    void onAdvertisementReceived(
-        const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher &sender,
-        const winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementReceivedEventArgs &args);
+    // 广播接收回调（在 WinRT 线程池线程触发，经 SharedBleWatcher 分发）。
+    void onAdvertisementReceived(const SharedBleWatcher::Args &args);
 
     // 蓝牙地址 -> 解析结果。由 watcher 回调线程写、readDevices() 读，需加锁。
     std::map<uint64_t, AdvDevice> m_devices;
     std::mutex m_mutex;
 
-    winrt::Windows::Devices::Bluetooth::Advertisement::BluetoothLEAdvertisementWatcher m_watcher{nullptr};
-    bool m_watcherStarted = false;
-    winrt::event_token m_receivedToken;
+    // SharedBleWatcher 订阅 id；0 表示未订阅。
+    std::uint64_t m_subscriptionId = 0;
 };

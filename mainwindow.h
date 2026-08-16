@@ -235,6 +235,9 @@ private:
     RpcServer *m_rpcServer = nullptr;
 
     QList<BatteryDevice> m_devices;
+    // 是否收到过至少一次 devicesUpdated。首次发布即使列表为空也要走一次
+    // 整表 / 托盘构建（否则空列表占位行不会出现）。
+    bool m_hasDevicesSnapshot = false;
     QString m_currentDetailId;
     bool m_applyingTheme = false;
 

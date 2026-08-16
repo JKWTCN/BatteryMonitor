@@ -2,6 +2,8 @@
 
 #include <string>
 
+class QFile;
+
 // 跨平台文件日志器。使用 Qt 处理路径、Unicode、时间和文件 I/O。
 //
 // 设计要点：
@@ -9,7 +11,8 @@
 //   - 支持日志等级：Verbose / Info / Warning / Error，可设最小输出等级做过滤。
 //   - 同时支持 std::string（UTF-8）与 std::wstring（宽字符，Win32/WinRT 常返回），
 //     内部统一以 UTF-8 写入文件，不会乱码。
-//   - 线程安全；单文件超过 maxBytes 时截断重写。
+//   - 线程安全；日志文件句柄常开（追加写），写失败（如文件被外部删除）
+//     时重开重试；单文件超过 maxBytes 时截断重写，大小检查按行数降频。
 //
 // 等级说明：
 //   - Verbose: 高频诊断明细（如每轮刷新的逐设备读数）。默认被丢弃，
@@ -65,6 +68,7 @@ public:
 
 private:
     Logger();
+    ~Logger();
     Logger(const Logger &) = delete;
     Logger &operator=(const Logger &) = delete;
 
@@ -74,7 +78,10 @@ private:
     // 解析最终日志文件路径。
     std::wstring resolveFilePath();
 
-    // 文件超过上限时清空重写。
+    // 打开（或复用）常开的日志文件句柄。失败返回 false。
+    bool openFile();
+
+    // 文件超过上限时清空重写；大小检查按行数降频（见 kRotateCheckLines）。
     void rotateIfNeeded();
 
     // 实际写一行（调用前已加锁、已格式化为 UTF-8）。
@@ -89,6 +96,10 @@ private:
     unsigned long long m_maxBytes = 1024 * 1024; // 1MB 上限
     Level m_minLevel = Level::Info;
     bool m_initialized = false;
+    // 常开句柄（追加模式）。仅持有 g_logMutex 时访问。
+    QFile *m_file = nullptr;
+    // 距下一次大小轮转检查还剩的行数；0 表示下一行写入时必查一次。
+    unsigned int m_linesUntilRotateCheck = 0;
 };
 
 // —— 便捷宏 ——

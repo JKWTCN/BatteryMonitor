@@ -103,6 +103,21 @@ struct BatteryDevice
 // 设备列表（核心层用 std::vector；Qt 边界自行转换为 QList/QVector）。
 using BatteryDeviceList = std::vector<BatteryDevice>;
 
+// 两台设备的“用户可见内容”是否一致（按同一下标的两台设备比较）。
+// 供消费方判断列表是否需要重建：排除 lastSeenMsecs（每轮刷新都会变，
+// 但用户看不到），其余展示相关字段全部参与比较。
+inline bool sameDisplayContent(const BatteryDevice &a, const BatteryDevice &b)
+{
+    return a.id == b.id && a.name == b.name && a.type == b.type &&
+           a.subType == b.subType && a.percentage == b.percentage &&
+           a.level == b.level && a.leftPercent == b.leftPercent &&
+           a.rightPercent == b.rightPercent && a.casePercent == b.casePercent &&
+           a.charging == b.charging && a.leftCharging == b.leftCharging &&
+           a.rightCharging == b.rightCharging && a.caseCharging == b.caseCharging &&
+           a.paired == b.paired && a.wired == b.wired &&
+           a.connected == b.connected && a.stale == b.stale;
+}
+
 // 是否“三路电量”音频设备（AirPods / 小米耳机）。
 // UI 列表 / 详情页 / 历史曲线 / 过滤逻辑据此决定是否按左/右/盒三列展示。
 inline bool isThreeChannelAudio(BatteryDevice::SubType subType)

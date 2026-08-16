@@ -28,6 +28,9 @@ QString toQString(const std::wstring &value)
 {
     return QString::fromStdWString(value);
 }
+
+// 大小轮转检查频率：每写多少行 stat 一次文件大小。
+constexpr unsigned int kRotateCheckLines = 512;
 } // namespace
 
 Logger &Logger::instance()
@@ -37,6 +40,11 @@ Logger &Logger::instance()
 }
 
 Logger::Logger() = default;
+
+Logger::~Logger()
+{
+    delete m_file; // QFile 析构时自动关闭。
+}
 
 void Logger::setLevel(Level level)
 {
@@ -82,23 +90,57 @@ std::wstring Logger::resolveFilePath()
     return QDir::cleanPath(path).toStdWString();
 }
 
+bool Logger::openFile()
+{
+    if (!m_file) {
+        m_file = new QFile(toQString(m_filePath));
+    }
+    if (!m_file->isOpen() &&
+        !m_file->open(QIODevice::WriteOnly | QIODevice::Append)) {
+        return false;
+    }
+    return true;
+}
+
 void Logger::rotateIfNeeded()
 {
-    QFile file(toQString(m_filePath));
-    if (file.size() > static_cast<qint64>(m_maxBytes) &&
-        file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        file.close();
+    // 每行日志都打开一次文件查大小太贵（Verbose 下高频路径会放大成可观的
+    // 系统调用 / CPU 开销），按行数降频；计数器为 0（首次写入 / 刚轮转）
+    // 时必查一次，保证已超限的旧日志第一行就触发截断。
+    if (m_linesUntilRotateCheck > 0) {
+        --m_linesUntilRotateCheck;
+        return;
+    }
+    m_linesUntilRotateCheck = kRotateCheckLines - 1;
+
+    QFileInfo info(toQString(m_filePath));
+    if (info.size() <= static_cast<qint64>(m_maxBytes)) {
+        return;
+    }
+    // 超过上限：关闭常开句柄后截断重写，下一次 writeLine 会重新打开。
+    if (m_file && m_file->isOpen()) {
+        m_file->close();
+    }
+    QFile truncate(toQString(m_filePath));
+    if (truncate.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        truncate.close();
     }
 }
 
 void Logger::writeLine(const std::string &utf8Line)
 {
     rotateIfNeeded();
-    QFile file(toQString(m_filePath));
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Append)) {
+    if (!openFile()) {
         return;
     }
-    file.write(utf8Line.data(), static_cast<qint64>(utf8Line.size()));
+    if (m_file->write(utf8Line.data(), static_cast<qint64>(utf8Line.size())) >= 0) {
+        return;
+    }
+    // 写失败（如日志文件被外部删除）：重开一次再试，仍失败则放弃本行。
+    m_file->close();
+    if (openFile()) {
+        m_file->write(utf8Line.data(), static_cast<qint64>(utf8Line.size()));
+    }
 }
 
 std::string Logger::formatLine(const std::wstring &message, Level level)

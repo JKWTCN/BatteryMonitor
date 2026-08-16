@@ -1072,10 +1072,27 @@ void MainWindow::setupConnections()
 
 void MainWindow::onDevicesUpdated(const QList<BatteryDevice> &devices)
 {
+    // 每轮刷新里每个 provider 完成都会触发一次本函数（一周期 12+ 次），
+    // 设备读数稳定时整表 / 详情 / 托盘的重复重建是纯浪费。展示内容与上次
+    // 完全一致时跳过这三步。notifyLowBattery 不受影响：Always / 周期性
+    // 重复提醒是时间驱动的，必须每次都评估。
+    bool contentChanged = !m_hasDevicesSnapshot || m_devices.size() != devices.size();
+    if (!contentChanged) {
+        for (int i = 0; i < devices.size(); ++i) {
+            if (!sameDisplayContent(m_devices.at(i), devices.at(i))) {
+                contentChanged = true;
+                break;
+            }
+        }
+    }
     m_devices = devices;
-    rebuildTable(devices);
-    refreshDetailPage();
-    updateTray(devices);
+    m_hasDevicesSnapshot = true;
+
+    if (contentChanged) {
+        rebuildTable(devices);
+        refreshDetailPage();
+        updateTray(devices);
+    }
     notifyLowBattery(devices);
 }
 

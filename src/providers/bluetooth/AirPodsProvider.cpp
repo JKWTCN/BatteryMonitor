@@ -226,16 +226,10 @@ AirPodsProvider::AirPodsProvider() = default;
 
 AirPodsProvider::~AirPodsProvider()
 {
-    if (m_watcherStarted && m_watcher)
+    if (m_subscriptionId)
     {
-        try
-        {
-            m_watcher.Received(m_receivedToken);
-            m_watcher.Stop();
-        }
-        catch (...)
-        {
-        }
+        SharedBleWatcher::instance().removeCallback(m_subscriptionId);
+        m_subscriptionId = 0;
     }
 }
 
@@ -244,38 +238,22 @@ std::wstring AirPodsProvider::displayName() const
     return L"AirPods";
 }
 
-void AirPodsProvider::ensureWatcherStarted()
+void AirPodsProvider::ensureSubscribed()
 {
-    if (m_watcherStarted)
+    if (!m_subscriptionId)
     {
+        m_subscriptionId = SharedBleWatcher::instance().addCallback(
+            [this](const SharedBleWatcher::Args &args) { onAdvertisementReceived(args); });
+        LOG_W(L"[AirPods] subscribed to shared watcher (Apple CompanyId=0x004C, RSSI>=" +
+              std::to_wstring(kRssiThreshold) + L"dBm)");
         return;
     }
-    try
-    {
-        m_watcher = BluetoothLEAdvertisementWatcher();
-        m_watcher.ScanningMode(BluetoothLEScanningMode::Active);
-        // 不设 ManufacturerData 过滤（构造空数据在某些 SDK 版本上会失败），
-        // 改为接收所有广播，在回调里按 CompanyId 过滤。
-        m_receivedToken = m_watcher.Received(
-            {this, &AirPodsProvider::onAdvertisementReceived});
-        m_watcher.Start();
-        m_watcherStarted = true;
-        LOG_W(L"[AirPods] watcher started (Apple CompanyId=0x004C, RSSI>=" +
-              std::to_wstring(kRssiThreshold) + L"dBm)");
-    }
-    catch (const winrt::hresult_error &e)
-    {
-        LOG_ERR_W(L"[AirPods] watcher start FAILED: " + std::wstring(e.message()));
-    }
-    catch (...)
-    {
-        LOG_ERR("[AirPods] watcher start FAILED (unknown)");
-    }
+    // 已订阅但 watcher 未启动成功（如蓝牙射频当时未开）：每轮重试启动。
+    SharedBleWatcher::instance().ensureStarted();
 }
 
 void AirPodsProvider::onAdvertisementReceived(
-    const BluetoothLEAdvertisementWatcher & /*sender*/,
-    const BluetoothLEAdvertisementReceivedEventArgs &args)
+    const SharedBleWatcher::Args &args)
 {
     try
     {
@@ -399,7 +377,7 @@ std::vector<BatteryDevice> AirPodsProvider::readDevices()
     catch (...)
     {
     }
-    ensureWatcherStarted();
+    ensureSubscribed();
 
     std::vector<BatteryDevice> devices;
     const auto now = std::chrono::steady_clock::now();

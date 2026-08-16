@@ -69,6 +69,8 @@ set(APP_PROVIDER_FILES
     src/providers/bluetooth/BluetoothProvider.h
     src/providers/bluetooth/ClassicBluetoothProvider.cpp
     src/providers/bluetooth/ClassicBluetoothProvider.h
+    src/providers/bluetooth/SharedBleWatcher.cpp
+    src/providers/bluetooth/SharedBleWatcher.h
     src/providers/bluetooth/AirPodsProvider.cpp
     src/providers/bluetooth/AirPodsProvider.h
     src/providers/bluetooth/XiaomiBudsProvider.cpp
