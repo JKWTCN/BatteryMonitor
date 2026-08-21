@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.25)
 if(NOT WIN32)
     message(FATAL_ERROR "BatteryMonitor currently supports Windows only.")
 endif()
-project(BatteryMonitor VERSION 1.3 LANGUAGES CXX)
+project(BatteryMonitor VERSION 1.4 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 if(MSVC)
@@ -12,7 +12,7 @@ if(MSVC)
     include(InstallRequiredSystemLibraries)
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(APP_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
