@@ -12,6 +12,8 @@
 //   - 枚举字段统一输出小写字符串。
 //   - percentage == -1 与 AirPods 左/右/盒 -1 输出为 JSON null（而非 0），
 //     避免客户端把"未知"误当成"0%"。
+//   - percentageUpper 是区间电量的开区间上界（如 80%~90% 的 90）；
+//     精确读数输出 null，客户端据此决定显示区间还是单值。
 //   - name / alias / displayName 三字段同时给出：displayName = alias 非空 ? alias : name，
 //     与 MainWindow::deviceDisplayName 一致。
 //

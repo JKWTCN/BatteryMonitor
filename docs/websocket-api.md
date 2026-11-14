@@ -118,7 +118,8 @@ Server **默认关闭**，可通过以下任一方式启用：
 | `displayName`  | string       | 实际展示名 =`alias` 非空 ? `alias` : `name`。                                                                                                 |
 | `type`         | string       | 设备类别：`"bluetooth"` \| `"xbox"` \| `"hid"` \| `"system"`（本机电池）                                                                     |
 | `subType`      | string       | 子类别：`"generic"` \| `"airpods"` \| `"xiaomi_buds"`                                                                                           |
-| `percentage`   | number\|null | 精确电量`0-100`；`null` 表示无精确值（如 Xbox 离散档位），此时应回退到 `level`。AirPods 取左/右/盒三者最低值。                                |
+| `percentage`   | number\|null | 精确电量`0-100`；`null` 表示无精确值（如 Xbox 离散档位），此时应回退到 `level`。AirPods 取左/右/盒三者最低值。区间电量时为**下界**。            |
+| `percentageUpper` | number\|null | 区间电量的**开区间上界**（不含），如 DS5 档位 `percentage=80` + `percentageUpper=90` 表示 `[80,90)`，应显示「80%~90%」；`null` 表示精确读数。排序 / 电量条 / 历史仍用 `percentage`。 |
 | `level`        | string       | **始终填充**的离散档位，用于着色 / 排序 / 提醒：`"unknown"` \| `"empty"` \| `"low"` \| `"medium"` \| `"full"`                       |
 | `leftPercent`  | number\|null | 左耳电量；`null`=未知（单耳使用/盒盖打开）。仅 `subType=="airpods"` / `"xiaomi_buds"` 有意义。                                                  |
 | `rightPercent` | number\|null | 右耳电量。                                                                                                                                  |
@@ -147,6 +148,7 @@ Server **默认关闭**，可通过以下任一方式启用：
   "type": "bluetooth",
   "subType": "generic",
   "percentage": 73,
+  "percentageUpper": null,
   "level": "medium",
   "leftPercent": null,
   "rightPercent": null,
@@ -172,6 +174,7 @@ Server **默认关闭**，可通过以下任一方式启用：
   "type": "bluetooth",
   "subType": "airpods",
   "percentage": 45,
+  "percentageUpper": null,
   "level": "low",
   "leftPercent": 60,
   "rightPercent": 45,
@@ -190,6 +193,8 @@ Server **默认关闭**，可通过以下任一方式启用：
 ```
 
 > AirPods 的 `percentage` 取左/右/盒三路中**有效值最低**者（`-1` 未知路跳过），便于排序与低电量提醒。
+
+> 按档位上报的设备（如 DualSense）会同时给出 `percentage`（下界）与 `percentageUpper`（开区间上界），例如 `80` + `90` 表示 `[80, 90)`，客户端应显示「80%~90%」；`percentageUpper` 为 `null` 时按精确百分比显示。
 
 ### 4.2 `level` 枚举
 

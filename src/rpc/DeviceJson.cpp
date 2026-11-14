@@ -31,6 +31,9 @@ QJsonObject toJson(const BatteryDevice &device)
     o["type"] = typeToString(device.type);
     o["subType"] = subTypeToString(device.subType);
     o["percentage"] = percentValue(device.percentage);
+    // 区间电量的开区间上界（如 80%~90% 中的 90）；精确读数为 null。
+    // 客户端可用它显示真实档位区间，而不是把下界当成精确百分比。
+    o["percentageUpper"] = percentValue(device.percentageUpper);
     o["level"] = levelToString(device.level);
     o["leftPercent"] = percentValue(device.leftPercent);
     o["rightPercent"] = percentValue(device.rightPercent);
@@ -73,12 +76,13 @@ QString signature(const BatteryDevice &device)
     // 仅纳入"客户端可见且会影响展示/判断"的字段。
     // 刻意排除 lastSeenMsecs（每轮都变，会破坏去重）。
     // 含 rateMilliwatts：订阅端（StreamDock 等）需要实时感知功率变化。
-    return QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14|%15|%16|%17|%18|%19")
+    return QString("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11|%12|%13|%14|%15|%16|%17|%18|%19|%20")
         .arg(QString::fromStdWString(device.id))
         .arg(QString::fromStdWString(device.name))
         .arg(static_cast<int>(device.type))
         .arg(static_cast<int>(device.subType))
         .arg(device.percentage)
+        .arg(device.percentageUpper)
         .arg(static_cast<int>(device.level))
         .arg(device.leftPercent)
         .arg(device.rightPercent)

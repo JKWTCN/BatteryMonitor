@@ -8,7 +8,7 @@ English | [简体中文](README.md)
 
 BatteryMonitor is a Windows desktop battery monitor for common wireless peripherals. It shows device battery status in a main window and in the system tray.
 
-The project is built with Qt 6 and CMake. It uses multiple providers to read battery information from Bluetooth devices, Xbox controllers, and HID 2.4G dongles, then presents them through a unified UI.
+The project is built with Qt 6 and CMake. It uses multiple providers to read battery information from Bluetooth devices, Xbox and DualSense controllers, and HID 2.4G dongles, then presents them through a unified UI.
 
 ## Important Notes
 
@@ -52,6 +52,7 @@ Besides the verified devices above, the code also contains adapter logic for som
 | AirPods / Beats series                             | Apple Company ID`0x004C`, built-in Model ID table                                                                                                              | Theoretical, unverified |
 | Xiaomi / Redmi Buds series earbuds                 | Xiaomi BLE beacon (CompanyId`0x038F` / Service UUID `0xFD2D`); Redmi Buds 5 Pro verified, other models theoretical                                           | Partially verified      |
 | Xbox / XInput / Windows game controllers           | Microsoft VID`0x045E` or Windows controller interfaces                                                                                                         | Theoretical, unverified |
+| Sony DualSense / DualSense Edge                    | VID`0x054C` / PID `0x0CE6`, `0x0DF2`; USB report `0x01` / Bluetooth report `0x31` with CRC32 check                                                          | Theoretical, unverified |
 | Flydigi controller series                          | Apex, Vader, Direwolf, and other models recognized and reported by`SpaceStationService`; Direwolf 4 verified                                                   | Partially verified      |
 | Standard BLE Battery Service devices               | BLE GATT Battery Service, no fixed USB VID/PID                                                                                                                   | Theoretical, unverified |
 | Classic Bluetooth audio devices                    | Windows BTHENUM device property, no fixed USB VID/PID                                                                                                            | Theoretical, unverified |
@@ -59,6 +60,8 @@ Besides the verified devices above, the code also contains adapter logic for som
 If your device can be detected and its battery can be read correctly, device model and test results are welcome. They can be added to the verified device list later.
 
 Note: AULA / AJAZZ wired USB keyboard bodies are not included in the current HID battery reading scope, even when they are visible through WebHID. The provider only reads battery data for devices behind a 2.4G dongle.
+
+DualSense notes: the controller reports battery in 10% steps, and the UI shows the real range of that step (for example `30%~40%`, i.e. `[30, 40)`) instead of a misleading exact `30%`; bars / sorting / icons / history still use the lower bound, and low-battery alerts use the highest possible value in the range. Charging / fully charged state is supported (fully charged shows an exact `100%`). Battery data comes from input reports the controller already sends; the app never switches the device mode, so Bluetooth "simplified reports" carry no battery level and the last reading is kept instead. A sleeping controller, or one opened exclusively by software such as Steam, may also be unreadable. USB connections are read as well, including charging state.
 
 ## Features
 
@@ -94,6 +97,7 @@ The project is split into several providers by device source:
 - `MchoseHidProvider`: reads precise battery percentage and charging state from MCHOSE A7 V2 series mice in wired, 1K/8K dongle, and 8K MagDock modes through hidapi; unsupported duplicate HID collections are skipped automatically
 - `VgnHidProvider`: reads VGN / related-brand 2.4G dongle device battery through hidapi
 - `RazerHidProvider`: reads Razer mouse / keyboard battery through hidapi
+- `DualSenseHidProvider`: passively reads input reports from Sony DualSense / DualSense Edge controllers through hidapi, decoding 10%-step battery level and charging state (shown as a range such as `80%~90%`); Bluetooth reports are CRC32-checked
 - `JsPluginProvider`: recursively loads JavaScript plugins from `plugins` next to the executable and exposes a restricted HID API for private protocols
 
 ## Requirements
@@ -205,7 +209,7 @@ Companion StreamDock plugin: [JKWTCN/BatteryMonitorDock](https://github.com/JKWT
 ├── mainwindow.cpp / mainwindow.h     # Main window, tray, settings page, device detail page
 ├── src/core                         # Device model, provider interface, BatteryManager aggregation logic
 ├── src/providers/bluetooth          # Bluetooth / AirPods providers
-├── src/providers/hid                # AULA / ASUS / Logitech / MCHOSE / VGN / Razer HID providers
+├── src/providers/hid                # AULA / ASUS / Logitech / MCHOSE / VGN / Razer / DualSense HID providers
 ├── src/providers/xbox               # Xbox provider
 ├── src/providers/system             # Built-in PC battery provider
 ├── src/rpc                          # WebSocket JSON-RPC server
@@ -227,6 +231,7 @@ To add support for a new device, you usually need to add or extend the correspon
 - Apple audio devices: start with `AirPodsProvider`
 - Xiaomi / Redmi earbuds: start with `XiaomiBudsProvider`
 - XInput / Windows game controllers: start with `XboxProvider`
+- Sony DualSense / DualSense Edge controllers: start with `DualSenseHidProvider`
 - For 2.4G dongles or private HID protocols, prefer a JavaScript plugin; see the
   [JavaScript Plugin Guide](docs/js-plugin-en.md)
 - Extend a native provider under `src/providers/hid` only when the JavaScript API cannot express the protocol

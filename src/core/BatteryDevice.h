@@ -70,6 +70,14 @@ struct BatteryDevice
     //   Xbox: -1 表示“无精确值”（XInput 离散档位），增强路径拿到精确值时填 0-100。
     int percentage = -1;
 
+    // 区间电量的上界（不含），-1 表示该设备上报的是精确百分比。
+    // 仅按档位上报的设备填写（目前是 DualSense 的 10% 分档）：
+    //   percentage=80, percentageUpper=90 表示真实电量落在 [80, 90)，
+    //   界面应显示「80%~90%」，而不是会被误读成精确值的「80%」。
+    // percentage 始终是区间下界，继续用于排序 / 着色 / 图标 / 电量条 /
+    // 历史入库；只有显示文本与低电量提醒需要看 percentageUpper。
+    int percentageUpper = -1;
+
     // 离散电量档位，始终填充，用于显示 / 着色 / 排序 / 低电量提醒。
     BatteryLevel level = BatteryLevel::Unknown;
 
@@ -127,6 +135,21 @@ struct BatteryDevice
 // 设备列表（核心层用 std::vector；Qt 边界自行转换为 QList/QVector）。
 using BatteryDeviceList = std::vector<BatteryDevice>;
 
+// 该读数是否为「区间电量」（如 DS5 的 10% 分档），而非精确百分比。
+inline bool hasBatteryRange(const BatteryDevice &d)
+{
+    return d.percentage >= 0 && d.percentageUpper > d.percentage &&
+           d.percentageUpper <= 100;
+}
+
+// 该读数可能达到的最大百分比（含）。
+// 精确读数就是它本身；区间读数是开区间上界减一（80%~90% -> 89%）。
+// 低电量提醒按此值判断，避免把「80%~90%」当成确定的 80% 而误报。
+inline int maxPossiblePercentage(const BatteryDevice &d)
+{
+    return hasBatteryRange(d) ? d.percentageUpper - 1 : d.percentage;
+}
+
 // 两台设备的“用户可见内容”是否一致（按同一下标的两台设备比较）。
 // 供消费方判断列表是否需要重建：排除 lastSeenMsecs（每轮刷新都会变，
 // 但用户看不到）与 rssi（逐轮波动，由详情页单独增量刷新），
@@ -136,6 +159,7 @@ inline bool sameDisplayContent(const BatteryDevice &a, const BatteryDevice &b)
     return a.id == b.id && a.alertGroupId == b.alertGroupId &&
            a.name == b.name && a.type == b.type &&
            a.subType == b.subType && a.percentage == b.percentage &&
+           a.percentageUpper == b.percentageUpper &&
            a.level == b.level && a.leftPercent == b.leftPercent &&
            a.rightPercent == b.rightPercent && a.casePercent == b.casePercent &&
            a.charging == b.charging && a.leftCharging == b.leftCharging &&
