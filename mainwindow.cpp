@@ -133,7 +133,13 @@ QString batteryText(const BatteryDevice &device)
         return text;
     }
     if (device.percentage >= 0) {
-        QString text = QString::number(device.percentage) + QLatin1Char('%');
+        // 按档位上报的设备（如 DS5 的 10% 分档）给出的是区间：
+        // 80%~90% 不能被写成看似精确的 80%。精确读数仍走单值格式。
+        QString text = hasBatteryRange(device)
+                           ? QStringLiteral("%1%~%2%")
+                                 .arg(device.percentage)
+                                 .arg(device.percentageUpper)
+                           : QString::number(device.percentage) + QLatin1Char('%');
         if (device.charging) {
             text += QStringLiteral(" ⚡");
         }
@@ -429,7 +435,8 @@ QString chargingPartsText(const BatteryDevice &device)
 //   Medium -> 视为 55%
 //   Full   -> 视为 100%
 // 与 mainwindow.cpp 中 levelRepresentativePercent 保持一致。
-// 当设备精确百分比 >= 0 时直接与阈值比较。
+// 当设备精确百分比 >= 0 时直接与阈值比较；区间电量（如 DS5 的 80%~90%）
+// 按区间内最大可能值比较，避免把下界当成确定读数而误报。
 bool isAtOrBelowThreshold(const BatteryDevice &device, int threshold)
 {
     // 阈值合法范围 1..100，<=0 视为关闭（防御性，正常路径走 alertEnabled）。
@@ -440,7 +447,9 @@ bool isAtOrBelowThreshold(const BatteryDevice &device, int threshold)
         return false;
     }
     if (device.percentage >= 0) {
-        return device.percentage <= threshold;
+        // 区间电量按「区间内最大可能值」判断：80%~90% 只有在阈值 >= 89
+        // 时才算确定低电量，避免把 80% 这个下界当成精确读数误报。
+        return maxPossiblePercentage(device) <= threshold;
     }
     return levelRepresentativePercent(device.level) <= threshold;
 }

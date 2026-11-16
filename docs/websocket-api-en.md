@@ -118,7 +118,8 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
 | `displayName` | string | Effective display name = `alias` non-empty ? `alias` : `name`. |
 | `type` | string | Device category: `"bluetooth"` \| `"xbox"` \| `"hid"` |
 | `subType` | string | Sub-category: `"generic"` \| `"airpods"` \| `"xiaomi_buds"` |
-| `percentage` | number\|null | Precise battery level `0-100`; `null` means no precise value (e.g. Xbox discrete levels) — fall back to `level`. AirPods: lowest of left/right/case. |
+| `percentage` | number\|null | Precise battery level `0-100`; `null` means no precise value (e.g. Xbox discrete levels) — fall back to `level`. AirPods: lowest of left/right/case. For stepped readings this is the **lower bound**. |
+| `percentageUpper` | number\|null | **Exclusive upper bound** for stepped readings, e.g. a DualSense step with `percentage=80` + `percentageUpper=90` means `[80,90)` and should be displayed as `80%~90%`; `null` means an exact percentage. Sorting / bars / history still use `percentage`. |
 | `level` | string | **Always populated** discrete level, for coloring / sorting / alerts: `"unknown"` \| `"empty"` \| `"low"` \| `"medium"` \| `"full"` |
 | `leftPercent` | number\|null | Left bud battery; `null` = unknown (single-ear use / case open). Only meaningful when `subType` is `"airpods"` / `"xiaomi_buds"`. |
 | `rightPercent` | number\|null | Right bud battery. |
@@ -145,6 +146,7 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
   "type": "bluetooth",
   "subType": "generic",
   "percentage": 73,
+  "percentageUpper": null,
   "level": "medium",
   "leftPercent": null,
   "rightPercent": null,
@@ -170,6 +172,7 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
   "type": "bluetooth",
   "subType": "airpods",
   "percentage": 45,
+  "percentageUpper": null,
   "level": "low",
   "leftPercent": 60,
   "rightPercent": 45,
@@ -188,6 +191,8 @@ Maps to the C++ `BatteryDevice` struct (`src/core/BatteryDevice.h`). This is the
 ```
 
 > AirPods `percentage` is the **lowest valid value** among left/right/case (`-1` / unknown paths are skipped), for sorting and low-battery alerts.
+
+> Stepped devices (e.g. DualSense) report both `percentage` (lower bound) and `percentageUpper` (exclusive upper bound), e.g. `80` + `90` means `[80, 90)` and clients should display `80%~90%`. A `null` `percentageUpper` means an exact percentage.
 
 ### 4.2 `level` Enum
 

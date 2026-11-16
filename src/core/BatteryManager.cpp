@@ -116,6 +116,7 @@ std::wstring BatteryManager::deviceSignature(const BatteryDevice &d)
        << static_cast<int>(d.type) << L'|'
        << static_cast<int>(d.subType) << L'|'
        << d.percentage << L'|'
+       << d.percentageUpper << L'|'
        << static_cast<int>(d.level) << L'|'
        << d.leftPercent << L'|'
        << d.rightPercent << L'|'
@@ -165,7 +166,11 @@ void BatteryManager::logSummaryIfChanged(const std::vector<BatteryDevice> &devic
                << L"/R" << d.rightPercent << (d.rightCharging ? L"⚡" : L"")
                << L"/C" << d.casePercent << (d.caseCharging ? L"⚡" : L"") << L"]";
         } else if (d.percentage >= 0) {
-            ss << L"=" << d.percentage << L"%";
+            ss << L"=" << d.percentage;
+            if (hasBatteryRange(d)) {
+                ss << L"~" << d.percentageUpper;
+            }
+            ss << L"%";
         } else {
             ss << L"=?"; // 离散档位无精确值（如 Xbox 离线）
         }

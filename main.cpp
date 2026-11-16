@@ -3,6 +3,7 @@
 #include "src/history/BatteryHistoryStore.h"
 #include "src/providers/hid/AsusMouseHidProvider.h"
 #include "src/providers/hid/AsusRogHidProvider.h"
+#include "src/providers/hid/DualSenseHidProvider.h"
 #include "src/providers/hid/LogitechHidProvider.h"
 #include "src/providers/hid/MchoseHidProvider.h"
 #include "src/providers/hid/RazerHidProvider.h"
@@ -267,6 +268,8 @@ int main(int argc, char *argv[])
     //   VgnHidProvider            —— VGN / 关联品牌 2.4G 接收器键盘 / 鼠标，
     //                                按协议族分派（ThreeMode / Weisheng / Beiying /
     //                                VgnRyMouse / Yongjiaxin / VgnLdMs / Arbit / VgnKc2）。
+    //   DualSenseHidProvider      —— Sony DualSense / DualSense Edge 手柄，被动读取
+    //                                USB 0x01 / 蓝牙 0x31 输入报告里的电量与充电状态。
     BatteryManager manager;
     // 本机电池放在最前注册，列表首行固定显示电脑电池。
     manager.addProvider(std::make_unique<SystemBatteryProvider>());
@@ -282,6 +285,7 @@ int main(int argc, char *argv[])
     manager.addProvider(std::make_unique<MchoseHidProvider>());
     manager.addProvider(std::make_unique<RazerHidProvider>());
     manager.addProvider(std::make_unique<VgnHidProvider>());
+    manager.addProvider(std::make_unique<DualSenseHidProvider>());
 
     // JS 插件：把 .js 文件放进 exe 同级 plugins/ 目录即可新增
     // 设备支持，无需重编译。加载 / 沙箱 / 失败停用见 docs/js-plugin.md。

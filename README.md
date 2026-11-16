@@ -8,7 +8,7 @@
 
 BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗口和系统托盘里查看常用无线外设的电量。
 
-项目基于 Qt 6 / CMake 开发，通过多个 Provider 分别读取蓝牙、Xbox 和 HID 2.4G 接收器设备的电量，并在界面中统一展示。
+项目基于 Qt 6 / CMake 开发，通过多个 Provider 分别读取蓝牙、Xbox、DualSense 手柄和 HID 2.4G 接收器设备的电量，并在界面中统一展示。
 
 ## 注意事项
 
@@ -52,6 +52,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 | AirPods / Beats 系列                 | Apple Company ID`0x004C`，代码内置 Model ID 表                                                                                                             | 理论支持，未验证 |
 | 小米 / Redmi Buds 系列耳机           | 小米 BLE 广播（CompanyId`0x038F` / Service UUID `0xFD2D`），已验证 Redmi Buds 5 Pro，其它型号理论支持                                                    | 部分验证         |
 | Xbox / XInput / Windows 游戏控制器   | Microsoft VID`0x045E` 或 Windows 控制器接口                                                                                                                | 理论支持，未验证 |
+| Sony DualSense / DualSense Edge      | VID`0x054C` / PID `0x0CE6`、`0x0DF2`；USB 报告 `0x01` / 蓝牙报告 `0x31`，蓝牙带 CRC32 校验                                             | 理论支持，未验证 |
 | Flydigi 手柄系列                     | 可被`SpaceStationService` 识别并上报的 Apex、Vader、Direwolf 等型号；Direwolf 4 已验证                                                                     | 部分验证         |
 | 标准 BLE 电量服务设备                | BLE GATT Battery Service，无固定 USB VID/PID                                                                                                                 | 理论支持，未验证 |
 | 经典蓝牙音频设备                     | Windows BTHENUM 设备属性，无固定 USB VID/PID                                                                                                                 | 理论支持，未验证 |
@@ -59,6 +60,8 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 如果你的设备能被识别并正常读取电量，欢迎提交设备型号和测试结果，后续可以补充到已验证设备列表。
 
 说明：AULA / AJAZZ 有线 USB 键盘本体即使能被 WebHID 枚举到，目前也不纳入 HID 电量读取范围；当前只读取 2.4G dongle 后挂接设备的电量。
+
+DualSense 说明：手柄按 10% 分档上报电量，界面显示该档位的真实区间（例如 30%~40%，即 `[30, 40)`），避免把档位误读成精确的 30%；电量条 / 排序 / 图标 / 历史仍取区间下界，低电量提醒按区间最大可能值保守判断，并支持充电中 / 已充满状态（充满显示确定的 100%）。电量来自手柄持续上报的输入报告，程序不会发送模式切换命令，因此蓝牙「简化报告」模式下不含电量，此时会沿用上一次读数；手柄休眠或被 Steam 等程序独占时也可能读不到。USB 连接同样会读取电量并识别充电状态。
 
 ## 功能
 
@@ -94,6 +97,7 @@ BatteryMonitor 是一个 Windows 桌面电量监控工具，用来在一个窗�
 - `MchoseHidProvider`：通过 hidapi 读取 MCHOSE A7 V2 系列鼠标在有线、1K/8K Dongle 和 8K MagDock 模式下的精确电量与充电状态；自动跳过不支持查询的重复 HID collection
 - `VgnHidProvider`：通过 hidapi 读取 VGN / 关联品牌 2.4G 接收器设备电量
 - `RazerHidProvider`：通过 hidapi 读取 Razer 鼠标 / 键盘电量
+- `DualSenseHidProvider`：通过 hidapi 被动读取 Sony DualSense / DualSense Edge 手柄的输入报告，解析 10% 分档电量与充电状态（界面以「80%~90%」形式显示档位区间）；蓝牙报告做 CRC32 校验
 - `JsPluginProvider`：递归加载 exe 同级 `plugins` 目录中的 JS 插件，通过受限 HID API 适配私有协议设备
 
 ## 环境要求
@@ -203,7 +207,7 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 ├── mainwindow.cpp / mainwindow.h     # 主窗口、托盘、设置页、设备详情页
 ├── src/core                         # 设备模型、Provider 接口、BatteryManager 聚合逻辑
 ├── src/providers/bluetooth          # 蓝牙 / AirPods Provider
-├── src/providers/hid                # AULA / ASUS / Logitech / MCHOSE / VGN / Razer HID Provider
+├── src/providers/hid                # AULA / ASUS / Logitech / MCHOSE / VGN / Razer / DualSense HID Provider
 ├── src/providers/xbox               # Xbox Provider
 ├── src/providers/system             # 本机（笔记本）电池 Provider
 ├── src/rpc                          # WebSocket JSON-RPC 服务
@@ -225,6 +229,7 @@ BatteryMonitor 内置一个 WebSocket JSON-RPC 2.0 服务，默认关闭。开�
 - Apple 音频设备优先看 `AirPodsProvider`
 - 小米 / Redmi 耳机优先看 `XiaomiBudsProvider`
 - XInput / Windows 游戏控制器设备优先看 `XboxProvider`
+- Sony DualSense / DualSense Edge 手柄优先看 `DualSenseHidProvider`
 - 2.4G 接收器或 HID 私有协议设备优先编写 JS 插件；API 和示例见
   [JS 插件开发指南](docs/js-plugin.md)
 - JS API 无法表达的协议再扩展 `src/providers/hid` 中的原生 Provider

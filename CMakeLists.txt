@@ -95,6 +95,8 @@ set(APP_PROVIDER_FILES
     src/providers/hid/VgnHidProvider.h
     src/providers/hid/RazerHidProvider.cpp
     src/providers/hid/RazerHidProvider.h
+    src/providers/hid/DualSenseHidProvider.cpp
+    src/providers/hid/DualSenseHidProvider.h
 )
 
 set_source_files_properties("${APP_VERSION_RC}" PROPERTIES GENERATED TRUE)
